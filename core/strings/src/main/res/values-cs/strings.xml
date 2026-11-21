@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings">Nastavení</string>
+    <string name="error_title">Nepovedlo se</string>
+    <string name="ok">OK</string>
+</resources>

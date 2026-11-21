@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_new_episodes">New Episodes</string>
+    <string name="tab_shows">Shows</string>
+    <string name="tab_downloads">Downloads</string>
+    <string name="tab_discover">Discover</string>
+    <string name="placeholder_coming">This screen is still being built.</string>
+</resources>

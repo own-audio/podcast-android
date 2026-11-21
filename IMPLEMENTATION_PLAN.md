@@ -18,7 +18,7 @@ both (P0).
 
 | Phase | What | State |
 |---|---|---|
-| P0 | Copy the foundation (music-android) and the spoken engine + ABS kit (book-android) | ☐ |
+| P0 | Copy the foundation (music-android) and the spoken engine + ABS kit (book-android) | ◐ skeleton 2026-11-21 |
 | P1 | `:kit:feed`: RSS / Atom / Podcasting 2.0 parser and fetcher | ☐ |
 | P2 | Podcast library layer, the device's own feeds (`FeedLibrary`), Up Next, pending progress | ☐ |
 | P3 | Audiobookshelf podcast libraries | ☐ |
@@ -34,7 +34,7 @@ both (P0).
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** nothing built yet; this plan and the foundation document exist (2026-11-21).
+**Where we stopped:** P0 started 2026-11-21: the build skeleton from music-android's F0 is copied (empty tabs, both flavours, CI, drift check). The three apps are built in parallel: each shared module is copied here the day it lands in music-android, and the rest of P0 completes with F7's shared screens.
 
 ## Rules for whoever executes this plan
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_new_episodes">Nové epizody</string>
+    <string name="tab_shows">Pořady</string>
+    <string name="tab_downloads">Stažené</string>
+    <string name="tab_discover">Objevovat</string>
+    <string name="placeholder_coming">Tahle obrazovka se ještě staví.</string>
+</resources>
