@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- `:player:spoken`, the spoken engine's logic, copied from book-android.
 - `:player:core` (sleep timer, resume store, storage route, payload check), copied from music-android.
 - `:core:servers`, copied from music-android (F3).
 - `:kit:ownaudio`, the own.audio /api/v2 client, copied from music-android (F2).
