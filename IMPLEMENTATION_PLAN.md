@@ -20,10 +20,10 @@ both (P0).
 |---|---|---|
 | P0 | Copy the foundation (music-android) and the spoken engine + ABS kit (book-android) | ◐ skeleton 2026-11-21 |
 | P1 | `:kit:feed`: RSS / Atom / Podcasting 2.0 parser and fetcher | ☑ 2026-11-21 |
-| P2 | Podcast library layer, the device's own feeds (`FeedLibrary`), Up Next, pending progress | ☐ |
+| P2 | Podcast library layer, the device's own feeds (`FeedLibrary`), Up Next, pending progress | ◐ domain logic done 2026-11-21; Room and wiring next |
 | P3 | Audiobookshelf podcast libraries | ☐ |
 | P4 | own.audio on v2, follow and unfollow included | ☐ |
-| P5 | gPodder sync (`:kit:gpodder`) | ◐ client done 2026-11-21, sync next |
+| P5 | gPodder sync (`:kit:gpodder`) | ◐ client and sync algorithm done 2026-11-21; live sync with the app |
 | P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ☐ |
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
 | P8 | Downloads, per-show rules, offline, refresh | ☐ |
@@ -126,7 +126,7 @@ Port `Packages/FeedKit`. Pure Kotlin, parsing with the `XmlPullParser` API: Andr
 
 Port `Packages/PodcastLibrary`:
 
-- Models: `Show`, `ShowSettings` (`inInbox` true, `autoQueue` false, `skipIntroSecs` null, `speed` null,
+- Models: `Show`, `ShowSettings` (`inInbox` true, `autoQueue` false, `skipIntroSecs` 0 (no skip), `speed` null,
   `autoDownload` 0, `deleteWhenPlayed` false, `keepAtMost` null), `Episode`, `EpisodeKey`, `Chapter`,
   `Transcript`, `ListeningProgress` (`reachedEnd` = the last 30 s or 98 %). Ids: `SourcedEpisode.id =
   "<source>/<showId>|<episodeId>"`, `SourceRef` = `Phone`, `Server(uuid)`, `Library(uuid, libraryId)`.

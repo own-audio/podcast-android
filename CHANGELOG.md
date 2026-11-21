@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- The podcast library's logic (P2, P5), ported from the iOS app with its tests: shows, episodes and sourced ids, the New Episodes rules, the device's own feeds with the refresh merge, Up Next and playing on, positions waiting to be sent, per-show download rules, the storage limit, and the gPodder sync algorithm.
 - `:player:spoken`, the spoken engine's logic, copied from book-android.
 - `:player:core` (sleep timer, resume store, storage route, payload check), copied from music-android.
 - `:core:servers`, copied from music-android (F3).
