@@ -52,6 +52,9 @@ object PlayerSetup {
             .setLoadControl(loadControl)
             // Keeps Wi-Fi awake while streaming with the screen off.
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            // A player held while there is no signal (a tunnel, a lift) is waiting on purpose;
+            // Media3 would otherwise fail it as "stuck buffering" after ten minutes.
+            .setStuckBufferingDetectionTimeoutMs(Int.MAX_VALUE)
             .build()
             .also { configure(it, kind) }
 
