@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- `:kit:ownaudio`, the own.audio /api/v2 client, copied from music-android (F2).
 - F1's look from music-android with the podcast blue, the podcast words and the microphone icon.
 - `:kit:feed` (P1): the RSS, Atom and Podcasting 2.0 parser and fetcher, ported from the iOS app.
 - `:kit:gpodder`: the gPodder API client.
