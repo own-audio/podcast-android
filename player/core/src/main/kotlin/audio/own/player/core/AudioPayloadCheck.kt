@@ -45,12 +45,21 @@ object AudioPayloadCheck {
      * it can only ever reject, never approve on its own.
      */
     fun looksLikeAudio(contentType: String?, prefix: ByteArray): Boolean {
-        val type = contentType?.lowercase()
-        if (type != null && rejectedTypes.any { type.contains(it) }) return false
+        if (isRejectedContentType(contentType)) return false
         // A JSON object or an XML/HTML document, whatever the declared type says.
         val first = prefix.firstOrNull()
         if (first == '{'.code.toByte() || first == '<'.code.toByte()) return false
         return signatures.any { (offset, bytes) -> startsWith(prefix, bytes, offset) }
+    }
+
+    /**
+     * A declared type that is certainly not audio: JSON, text (HTML) or XML. The stream data
+     * source refuses such answers before a byte reaches the listening cache, where an error page
+     * would otherwise be replayed as the song from then on.
+     */
+    fun isRejectedContentType(contentType: String?): Boolean {
+        val type = contentType?.lowercase() ?: return false
+        return rejectedTypes.any { type.contains(it) }
     }
 
     /** The same question for a file on disk; reads only the head, so a big download stays cheap. */

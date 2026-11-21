@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- `:player:core` with the Media3 playback pieces (link resolver, data source chain, listening cache, session callback, skip commands), copied from music-android.
 - P3 and P4: Audiobookshelf podcast libraries (with the feed's other episodes merged in) and own.audio on v2 — the catalogue from the sync feed, New Episodes without a request per show, follow, unfollow and refresh on the server, positions where the newer one wins, and the directory for Discover.
 - The podcast library's logic (P2, P5), ported from the iOS app with its tests: shows, episodes and sourced ids, the New Episodes rules, the device's own feeds with the refresh merge, Up Next and playing on, positions waiting to be sent, per-show download rules, the storage limit, and the gPodder sync algorithm.
 - `:player:spoken`, the spoken engine's logic, copied from book-android.
