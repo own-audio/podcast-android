@@ -25,15 +25,41 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
+import android.util.Xml
+import androidx.media3.common.util.UnstableApi
+import audio.own.kit.feed.FeedFetcher
+import audio.own.kit.feed.FeedParser
+import audio.own.kit.feed.XmlParserFactory
+import audio.own.player.core.JsonFile
+import audio.own.player.core.ListeningCache
+import audio.own.player.core.PlaybackDataSources
+import audio.own.player.core.PlaybackLinkRequest
+import audio.own.player.core.PlaybackLinkResolver
+import audio.own.player.core.StreamHttpClient
+import audio.own.podcast.library.FeedLibrary
+import audio.own.podcast.library.FeedLoader
+import audio.own.podcast.library.LastPlayed
+import audio.own.podcast.library.PendingProgress
+import audio.own.podcast.library.SourceRef
+import audio.own.podcast.library.SourcedEpisode
+import audio.own.podcast.library.UpNext
+import audio.own.podcast.library.ValueStore
+import audio.own.podcast.library.room.PodcastDatabase
+import audio.own.podcast.library.room.RoomFeedLibraryStore
+import audio.own.podcast.library.room.RoomValueStore
+import audio.own.podcastplayer.playback.Artwork
+import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.podcasts.PodcastModel
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Hand-wired dependencies. Android Auto, the assistant and the widget can bind to the media
  * service without any screen having started, so the playback dependencies will be created here,
  * eagerly, rather than from the UI.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class AppContainer(context: Context) {
     private val app = context.applicationContext
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -86,14 +112,85 @@ class AppContainer(context: Context) {
         scope = scope,
     )
 
-    /**
-     * Whether any show is followed on this device or a source. The welcome screen stays until
-     * there is a show or a server. TODO(P2): from the podcast library.
-     */
-    val hasShows: StateFlow<Boolean> = MutableStateFlow(false)
+    /** Where every part of the podcast library is kept. */
+    val database: PodcastDatabase = PodcastDatabase.open(app)
+
+    /** Publishers' feeds and chapter documents, on the plain client: no token goes to a publisher. */
+    val feeds = FeedFetcher(http, FeedParser(XmlParserFactory { Xml.newPullParser() }), userAgent)
+
+    val upNext = UpNext(RoomValueStore(database, "up-next", ListSerializer(UpNext.Entry.serializer())))
+    private val pendingProgress = PendingProgress(RoomValueStore(database, "pending-progress", ListSerializer(PendingProgress.Entry.serializer())))
+
+    /** The shows followed on this device by their feeds. */
+    val phone = FeedLibrary(
+        store = RoomFeedLibraryStore(database),
+        loader = FeedLoader { url, validators -> feeds.fetch(url, validators) },
+        // A refresh keeps an episode the feed dropped while it waits in Up Next.
+        queued = { upNext.all().mapNotNull { SourcedEpisode.parse(it.id) }.filter { it.first == SourceRef.Phone }.map { it.second } },
+    )
+
+    /** The main thread: the player and the model that drives it live there. */
+    val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    // One SimpleCache per folder per process; a second (a test's fresh Application) would throw,
+    // and the app then streams without one.
+    private val listeningCache = runCatching { ListeningCache.open(app) }.getOrNull()
+
+    val playbackSources = PlaybackDataSources(
+        context = app,
+        resolver = PlaybackLinkResolver { request -> podcasts.linkResolver.resolve(request) },
+        httpClient = StreamHttpClient.from(http),
+        cache = listeningCache,
+        userAgent = userAgent,
+    )
+
+    val player = EpisodePlayer(app, playbackSources, mainScope)
+
+    val artwork = Artwork(app)
+
+    val navStash = audio.own.podcastplayer.ui.NavStash()
+
+    private val lastPlayedFile = lastItemFile(File(app.filesDir, "last-played.json"))
+
+    val podcasts: PodcastModel by lazy {
+        PodcastModel(
+            db = database,
+            phone = phone,
+            upNext = upNext,
+            pending = pendingProgress,
+            lastPlayed = lastPlayedFile,
+            player = player,
+            servers = servers.state,
+            client = { id -> servers.client(id) },
+            preferences = preferences,
+            network = network.state,
+            offlineMode = { offline.isOfflineByChoice },
+            http = http,
+            feeds = feeds,
+            isFullyCached = { id -> playbackSources.isFullyCached(PlaybackLinkRequest(id)) },
+            strings = object : PodcastModel.Strings {
+                override val thisDevice: String get() = app.getString(R.string.this_device)
+
+                override fun chapter(number: Int): String = app.getString(R.string.chapter_number, number)
+            },
+            log = log,
+            scope = mainScope,
+        )
+    }
 
     /** The header of a shared log: which app, which system. */
     val logHeader: String get() = "own.podcast $versionName ($versionCode), Android ${Build.VERSION.RELEASE}, ${Build.MANUFACTURER} ${Build.MODEL}"
 
     private fun appLocale(): Locale = AppCompatDelegate.getApplicationLocales()[0] ?: Locale.getDefault()
+}
+
+/** `last-played.json`, written whole and atomically: a kill mid-write leaves the previous one. */
+private fun lastItemFile(file: File): ValueStore<LastPlayed> = object : ValueStore<LastPlayed> {
+    private val json = JsonFile(file, LastPlayed.serializer())
+
+    override suspend fun load(): LastPlayed? = withContext(Dispatchers.IO) { json.read() }
+
+    override suspend fun save(value: LastPlayed?) = withContext(Dispatchers.IO) {
+        if (value == null) json.delete() else json.write(value)
+    }
 }

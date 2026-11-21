@@ -55,10 +55,12 @@ fun Page(
     closeIsCancel: Boolean = false,
     actions: @Composable () -> Unit = {},
     scrolls: Boolean = true,
+    bottomBar: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -83,6 +85,34 @@ fun Page(
                 content = content,
             )
         }
+    }
+}
+
+/**
+ * A tab's page: its bar with the title (and the source switch, Offline Mode, Settings where the
+ * tab has them), the mini player above the navigation bar, and the content filling the rest.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TabBar(
+    title: String,
+    navigationIcon: @Composable () -> Unit = {},
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = navigationIcon,
+                actions = actions,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+        bottomBar = bottomBar,
+    ) { inner ->
+        Box(Modifier.fillMaxSize().padding(inner)) { content() }
     }
 }
 
@@ -178,18 +208,5 @@ fun Section(header: String?, modifier: Modifier = Modifier, footer: String? = nu
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides LocalPalette.current.foreground) {
             Column(content = content)
         }
-    }
-}
-
-/** A page whose screen comes in a later version: the welcome screen's ways in until P6. */
-@Composable
-fun LaterContent(title: String, onBack: () -> Unit) {
-    Page(title = title, onBack = onBack) {
-        Text(
-            stringResource(audio.own.podcastplayer.R.string.later_version_text),
-            color = LocalPalette.current.muted,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.fillMaxWidth().padding(Tokens.Spacing.xl),
-        )
     }
 }

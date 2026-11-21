@@ -1,10 +1,20 @@
 plugins {
     id("ownaudio.android.library")
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "audio.own.podcast.library"
+    testOptions {
+        // Robolectric runs the Room tests on the JVM and needs the merged manifest.
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+ksp {
+    // Exported so a schema change shows up in review and migrations can be tested against it.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -19,7 +29,13 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
 
+    // PodcastDatabase is a RoomDatabase the app opens and hands to the stores.
+    api(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     // The live tests read real feeds; Android's own XML parser is kXML too.

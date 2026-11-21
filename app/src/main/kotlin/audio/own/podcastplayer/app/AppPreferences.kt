@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import audio.own.core.designsystem.theme.AccentChoice
@@ -26,6 +27,26 @@ interface AppPreferences {
     suspend fun activeServerId(): String?
 
     suspend fun setActiveServerId(id: String?)
+
+    /** The source switch's choice ([audio.own.podcast.library.SourceRef.id]); null is All Sources. */
+    val activeSource: Flow<String?>
+
+    suspend fun setActiveSource(id: String?)
+
+    /** How the Shows tab sorts: `title`, `newEpisodes`, `recentlyFollowed`. */
+    val showsSort: Flow<String>
+
+    suspend fun setShowsSort(sort: String)
+
+    /** When shows set to add new episodes to Up Next last looked; null before the first look. */
+    suspend fun autoQueuedAt(): Long?
+
+    suspend fun setAutoQueuedAt(epochMs: Long)
+
+    /** Whether the notification permission was asked for (once, at the first play). */
+    suspend fun notificationsAsked(): Boolean
+
+    suspend fun setNotificationsAsked()
 }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -51,7 +72,35 @@ class DataStorePreferences(context: Context) : AppPreferences {
         store.edit { if (id == null) it.remove(ACTIVE_SERVER) else it[ACTIVE_SERVER] = id }
     }
 
+    override val activeSource: Flow<String?> = store.data.map { it[ACTIVE_SOURCE] }
+
+    override suspend fun setActiveSource(id: String?) {
+        store.edit { if (id == null) it.remove(ACTIVE_SOURCE) else it[ACTIVE_SOURCE] = id }
+    }
+
+    override val showsSort: Flow<String> = store.data.map { it[SHOWS_SORT] ?: "title" }
+
+    override suspend fun setShowsSort(sort: String) {
+        store.edit { it[SHOWS_SORT] = sort }
+    }
+
+    override suspend fun autoQueuedAt(): Long? = store.data.first()[AUTO_QUEUED_AT]
+
+    override suspend fun setAutoQueuedAt(epochMs: Long) {
+        store.edit { it[AUTO_QUEUED_AT] = epochMs }
+    }
+
+    override suspend fun notificationsAsked(): Boolean = store.data.first()[NOTIFICATIONS_ASKED] ?: false
+
+    override suspend fun setNotificationsAsked() {
+        store.edit { it[NOTIFICATIONS_ASKED] = true }
+    }
+
     private companion object {
+        val ACTIVE_SOURCE = stringPreferencesKey("activeSource")
+        val SHOWS_SORT = stringPreferencesKey("shows.sort")
+        val AUTO_QUEUED_AT = longPreferencesKey("upNext.autoQueuedAt")
+        val NOTIFICATIONS_ASKED = booleanPreferencesKey("notificationsAsked")
         val ACCENT = stringPreferencesKey(AccentChoice.STORAGE_KEY)
         val ACTIVE_SERVER = stringPreferencesKey("activeServerId")
         val OFFLINE_MODE = booleanPreferencesKey("offlineMode")
@@ -79,5 +128,35 @@ class MemoryPreferences(active: String? = null) : AppPreferences {
 
     override suspend fun setActiveServerId(id: String?) {
         active = id
+    }
+
+    private val sourceFlow = MutableStateFlow<String?>(null)
+    override val activeSource: Flow<String?> = sourceFlow
+
+    override suspend fun setActiveSource(id: String?) {
+        sourceFlow.value = id
+    }
+
+    private val sortFlow = MutableStateFlow("title")
+    override val showsSort: Flow<String> = sortFlow
+
+    override suspend fun setShowsSort(sort: String) {
+        sortFlow.value = sort
+    }
+
+    private var autoQueued: Long? = null
+
+    override suspend fun autoQueuedAt() = autoQueued
+
+    override suspend fun setAutoQueuedAt(epochMs: Long) {
+        autoQueued = epochMs
+    }
+
+    private var asked = false
+
+    override suspend fun notificationsAsked() = asked
+
+    override suspend fun setNotificationsAsked() {
+        asked = true
     }
 }

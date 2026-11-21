@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("ownaudio.android.application")
     id("io.github.takahirom.roborazzi")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // Absent on CI and on a fresh clone: release then builds unsigned instead of failing.
@@ -42,6 +43,10 @@ dependencies {
     implementation(project(":core:strings"))
     implementation(project(":core:servers"))
     implementation(project(":kit:ownaudio"))
+    implementation(project(":kit:feed"))
+    implementation(project(":library"))
+    implementation(project(":player:core"))
+    implementation(project(":player:spoken"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
@@ -57,6 +62,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
 
     // Sign in with Google: only the play build has Google Play services.
     "playImplementation"(libs.androidx.credentials)

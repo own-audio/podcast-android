@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- P6: the podcast screens and player — New Episodes, Shows, a show and its settings, an episode with chapters and show notes, Add a Show (also from feed:// and podcast:// links), Discover (own.audio's directory, or Apple's charts and search), the mini player and the player with Speed, Sleep Timer, Chapters and Up Next; follows feeds with no account and own.audio shows; the device's feeds kept in Room; plays in the background with skip buttons on the notification; the last episode comes back paused after a relaunch.
 - The app shell and the own.audio part of P7, ported from music-android: welcome (no account needed), own.audio account, Try the Demo Library, Add a Server with kind detection, Settings with status dots, the server page, Family, Devices, Listening and Logs. A privacy policy (PRIVACY.md).
 - `:player:core` with the Media3 playback pieces (link resolver, data source chain, listening cache, session callback, skip commands), copied from music-android.
 - P3 and P4: Audiobookshelf podcast libraries (with the feed's other episodes merged in) and own.audio on v2 — the catalogue from the sync feed, New Episodes without a request per show, follow, unfollow and refresh on the server, positions where the newer one wins, and the directory for Discover.

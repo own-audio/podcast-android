@@ -24,7 +24,7 @@ both (P0).
 | P3 | Audiobookshelf podcast libraries | ☑ 2026-11-21 (source; screens in P6) |
 | P4 | own.audio on v2, follow and unfollow included | ◐ source built 2026-11-21, live read test passes; the follow/play/unfollow round trip on a real account comes with the screens |
 | P5 | gPodder sync (`:kit:gpodder`) | ◐ client and sync algorithm done 2026-11-21; live sync with the app |
-| P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ☐ |
+| P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ◐ built 2026-11-21: two public feeds followed with no account, played with the notification and skip buttons, Up Next played on, resumed after a kill; the demo's shows played and resumed at the server's position. Open: Audiobookshelf/gPodder in the app, Share with the Family, the source built twice on first address choice, early renewal of expiring own.audio links, swap EpisodePlayer for :player:spoken's player |
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
 | P8 | Downloads, per-show rules, offline, refresh | ☐ |
 | P9 | Settings | ☐ |
@@ -34,7 +34,7 @@ both (P0).
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P0 skeleton and F1's look copied from music-android 2026-11-21, and `:kit:audiobookshelf` from book-android. P1 done the same day (`:kit:feed`, every iOS parser test ported, 20 real feeds parse; malformed feeds are retried and HTML entities written into the XML are understood). The gPodder client of P5 is done and tested live against podfetch; the sync algorithm (`GPodderSync`) comes with P5 proper.
+**Where we stopped:** P6 built 2026-11-21 (the app plays feeds with no account and own.audio shows). Next: P8 downloads and rules, P9 settings, then Audiobookshelf and gPodder in the app.
 
 ## Rules for whoever executes this plan
 

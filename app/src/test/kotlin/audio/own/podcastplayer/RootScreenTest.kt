@@ -10,10 +10,18 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import audio.own.core.servers.ServerAuth
-import audio.own.core.servers.ServerRecord
-import audio.own.podcastplayer.ui.OfflineReason
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import audio.own.podcast.library.SourceRef
+import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.podcasts.EpisodeActions
+import audio.own.podcastplayer.podcasts.NewEpisodesContent
+import audio.own.podcastplayer.podcasts.OfflineReason
+import audio.own.podcastplayer.podcasts.PodcastState
+import audio.own.podcastplayer.podcasts.SourceInfo
+import audio.own.podcastplayer.ui.Tab
 import audio.own.podcastplayer.ui.TabsScreen
+import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -26,11 +34,34 @@ import org.robolectric.annotation.Config
 class RootScreenTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun server(id: String) = ServerRecord(id, "own_audio", "Server $id", "https://$id.example.com", ServerAuth.OwnAudio("a@example.com", null))
+    private val phone = SourceInfo(SourceRef.Phone, "This Device", null)
+
+    private fun server(name: String) = SourceInfo(SourceRef.Server(UUID.nameUUIDFromBytes(name.toByteArray())), "Server $name", "own_audio")
+
+    @Composable
+    private fun Tabs(state: PodcastState = PodcastState(sources = listOf(phone)), offlineMode: Boolean = false, onOfflineMode: (Boolean) -> Unit = {}) {
+        TabsScreen { tab ->
+            if (tab == Tab.NEW_EPISODES) {
+                NewEpisodesContent(
+                    state = state,
+                    player = EpisodePlayer.State(),
+                    actions = EpisodeActions.None,
+                    canPlay = { true },
+                    offlineMode = offlineMode,
+                    onOfflineMode = onOfflineMode,
+                    onSettings = {},
+                    onSource = {},
+                    onRefresh = {},
+                )
+            } else {
+                Text(tab.name)
+            }
+        }
+    }
 
     @Test
     fun showsTheFourTabsInOrder() {
-        compose.setContent { TabsScreen() }
+        compose.setContent { Tabs() }
         listOf("Shows", "Downloads", "Discover").forEach {
             compose.onAllNodesWithText(it).assertCountEquals(1)
         }
@@ -44,7 +75,7 @@ class RootScreenTest {
     @Test
     @Config(qualifiers = "cs")
     fun tabsAreTranslated() {
-        compose.setContent { TabsScreen() }
+        compose.setContent { Tabs() }
         listOf("Pořady", "Stažené", "Objevovat").forEach {
             compose.onAllNodesWithText(it).assertCountEquals(1)
         }
@@ -53,11 +84,11 @@ class RootScreenTest {
 
     @Test
     fun theSourceSwitchOnlyWithAServerBesideThisDevice() {
-        var servers by mutableStateOf(emptyList<ServerRecord>())
-        compose.setContent { TabsScreen(servers = servers) }
+        var state by mutableStateOf(PodcastState(sources = listOf(phone)))
+        compose.setContent { Tabs(state) }
         compose.onAllNodesWithContentDescription("All Sources").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("Settings").assertCountEquals(1)
-        servers = listOf(server("a"))
+        state = PodcastState(sources = listOf(server("a"), phone))
         compose.onNodeWithContentDescription("All Sources").performClick()
         compose.onAllNodesWithText("This Device").assertCountEquals(1)
         compose.onAllNodesWithText("Server a").assertCountEquals(1)
@@ -67,7 +98,7 @@ class RootScreenTest {
     fun offlineModeFromTheBarAndItsLine() {
         var asked: Boolean? = null
         var offline by mutableStateOf<OfflineReason?>(null)
-        compose.setContent { TabsScreen(offline = offline, onOfflineMode = { asked = it }) }
+        compose.setContent { Tabs(PodcastState(sources = listOf(phone), offline = offline), onOfflineMode = { asked = it }) }
         compose.onNodeWithContentDescription("Offline Mode").performClick()
         assertEquals(true, asked)
         compose.onAllNodesWithText("Offline Mode is on").assertCountEquals(0)

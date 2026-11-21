@@ -314,8 +314,14 @@ class OwnAudioPodcastSource(
      * Live updates while the app is in the foreground: each `library` event reads the change
      * feed (two seconds after the last of a burst). Reconnects after a lost connection, waiting
      * 2 s and doubling to 2 min; ends when the account is signed out. Cancel it to stop.
+     * [onChange] runs after each sync it made, so the screens can read their lists again.
      */
-    suspend fun followLiveUpdates(debounceMs: Long = 2_000, firstRetryMs: Long = 2_000, maxRetryMs: Long = 120_000) {
+    suspend fun followLiveUpdates(
+        debounceMs: Long = 2_000,
+        firstRetryMs: Long = 2_000,
+        maxRetryMs: Long = 120_000,
+        onChange: suspend () -> Unit = {},
+    ) {
         var lastId: String? = null
         var retry = firstRetryMs
         while (true) {
@@ -330,6 +336,7 @@ class OwnAudioPodcastSource(
                                 delay(debounceMs)
                                 try {
                                     sync(force = true)
+                                    onChange()
                                 } catch (error: CancellationException) {
                                     throw error
                                 } catch (_: Exception) {

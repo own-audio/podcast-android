@@ -63,16 +63,10 @@ private object Routes {
     const val LISTENING = "listening/{id}"
     const val LOGS = "logs"
     const val LICENCES = "licences"
-    const val LATER = "later/{what}"
-}
-
-/** The welcome screen's ways in that open a page still to be built. */
-enum class LaterPage(val title: Int) {
-    FIND_A_SHOW(audio.own.podcastplayer.R.string.find_a_show),
-    ADD_FEED(audio.own.podcastplayer.R.string.add_feed_by_address),
 }
 
 /** The whole app: the theme with the chosen accent, the pages, and the two-factor step over them. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun AppRoot(container: AppContainer) {
     val accent by container.preferences.accent.collectAsState(initial = AccentChoice.APP)
@@ -81,10 +75,17 @@ fun AppRoot(container: AppContainer) {
             val nav = rememberNavController()
             AppNavHost(container, nav)
             TwoFactorOverlay(container)
+            PodcastDialogs(container)
+            // A feed link handed to the app opens Add a Show with it.
+            val podcastState by container.podcasts.state.collectAsStateWithLifecycle()
+            LaunchedEffect(podcastState.pendingFeedAddress, podcastState.loaded) {
+                if (podcastState.pendingFeedAddress != null && podcastState.loaded) nav.navigate(PodcastRoutes.ADD_SHOW) { launchSingleTop = true }
+            }
         }
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun AppNavHost(container: AppContainer, nav: NavHostController) {
     val servers by container.servers.state.collectAsStateWithLifecycle()
@@ -94,35 +95,21 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
 
     NavHost(nav, startDestination = Routes.MAIN) {
         composable(Routes.MAIN) {
-            val hasShows by container.hasShows.collectAsStateWithLifecycle()
-            val offlineMode by container.preferences.offlineMode.collectAsState(initial = false)
-            val network by container.network.state.collectAsStateWithLifecycle()
+            val podcasts by container.podcasts.state.collectAsStateWithLifecycle()
             when {
-                !servers.loaded -> LoadingScreen()
-                servers.servers.isEmpty() && !hasShows -> WelcomeRoute(
+                !servers.loaded || !podcasts.loaded -> LoadingScreen()
+                // The welcome screen stays while there is no show and no server.
+                servers.servers.isEmpty() && podcasts.shows.isEmpty() -> WelcomeRoute(
                     container,
                     onAccount = { nav.navigate("account/${it.name}") },
-                    onLater = { nav.navigate("later/${it.name}") },
+                    onFindShow = { nav.navigate(PodcastRoutes.DISCOVER) },
+                    onAddFeed = { nav.navigate(PodcastRoutes.ADD_SHOW) },
                     onAddServer = { nav.navigate(Routes.ADD_SERVER) },
                 )
-                else -> TabsScreen(
-                    servers = servers.servers,
-                    offlineMode = offlineMode,
-                    offline = when {
-                        offlineMode -> OfflineReason.CHOSEN
-                        !network.connected -> OfflineReason.NO_NETWORK
-                        else -> null
-                    },
-                    onOfflineMode = { on -> scope.launch { container.preferences.setOfflineMode(on) } },
-                    onSettings = { nav.navigate(Routes.SETTINGS) },
-                )
+                else -> PodcastTabs(container, nav, onSettings = { nav.navigate(Routes.SETTINGS) })
             }
         }
-        composable(Routes.LATER) { entry ->
-            val page = LaterPage.valueOf(entry.arguments?.getString("what") ?: LaterPage.FIND_A_SHOW.name)
-            // TODO(P6): Discover in a sheet, and Add a Show by its feed address.
-            LaterContent(stringResource(page.title), onBack = back)
-        }
+        podcastPages(container, nav)
         composable(Routes.ACCOUNT) { entry ->
             val mode = AccountMode.valueOf(entry.arguments?.getString("mode") ?: AccountMode.SIGN_IN.name)
             val vm = viewModel { OwnAudioAccountViewModel(mode, container.servers, container.log, GoogleSignIn.isAvailable) }
@@ -279,7 +266,7 @@ private fun accent(container: AppContainer): AccentChoice {
 }
 
 @Composable
-private fun WelcomeRoute(container: AppContainer, onAccount: (AccountMode) -> Unit, onLater: (LaterPage) -> Unit, onAddServer: () -> Unit) {
+private fun WelcomeRoute(container: AppContainer, onAccount: (AccountMode) -> Unit, onFindShow: () -> Unit, onAddFeed: () -> Unit, onAddServer: () -> Unit) {
     val vm = viewModel { ServerFormViewModel(container.servers, container.log, GoogleSignIn.isAvailable) }
     val state by vm.state.collectAsStateWithLifecycle()
     OnboardingContent(
@@ -288,8 +275,8 @@ private fun WelcomeRoute(container: AppContainer, onAccount: (AccountMode) -> Un
         onCreateAccount = { onAccount(AccountMode.SIGN_UP) },
         onSignIn = { onAccount(AccountMode.SIGN_IN) },
         onTryDemo = vm::tryDemo,
-        onFindShow = { onLater(LaterPage.FIND_A_SHOW) },
-        onAddFeed = { onLater(LaterPage.ADD_FEED) },
+        onFindShow = onFindShow,
+        onAddFeed = onAddFeed,
         onAddServer = onAddServer,
     )
 }
