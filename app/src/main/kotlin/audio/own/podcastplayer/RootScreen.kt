@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import audio.own.core.designsystem.theme.OwnAudioTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
@@ -35,7 +36,7 @@ enum class Tab(@StringRes val title: Int, val icon: ImageVector) {
 
 @Composable
 fun RootScreen() {
-    MaterialTheme {
+    OwnAudioTheme {
         var selected by rememberSaveable { mutableStateOf(Tab.NEW_EPISODES) }
         NavigationSuiteScaffold(
             navigationSuiteItems = {

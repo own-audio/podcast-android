@@ -19,11 +19,11 @@ both (P0).
 | Phase | What | State |
 |---|---|---|
 | P0 | Copy the foundation (music-android) and the spoken engine + ABS kit (book-android) | ◐ skeleton 2026-11-21 |
-| P1 | `:kit:feed`: RSS / Atom / Podcasting 2.0 parser and fetcher | ☐ |
+| P1 | `:kit:feed`: RSS / Atom / Podcasting 2.0 parser and fetcher | ☑ 2026-11-21 |
 | P2 | Podcast library layer, the device's own feeds (`FeedLibrary`), Up Next, pending progress | ☐ |
 | P3 | Audiobookshelf podcast libraries | ☐ |
 | P4 | own.audio on v2, follow and unfollow included | ☐ |
-| P5 | gPodder sync (`:kit:gpodder`) | ☐ |
+| P5 | gPodder sync (`:kit:gpodder`) | ◐ client done 2026-11-21, sync next |
 | P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ☐ |
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
 | P8 | Downloads, per-show rules, offline, refresh | ☐ |
@@ -34,7 +34,7 @@ both (P0).
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P0 started 2026-11-21: the build skeleton from music-android's F0 is copied (empty tabs, both flavours, CI, drift check). The three apps are built in parallel: each shared module is copied here the day it lands in music-android, and the rest of P0 completes with F7's shared screens.
+**Where we stopped:** P0 skeleton and F1's look copied from music-android 2026-11-21, and `:kit:audiobookshelf` from book-android. P1 done the same day (`:kit:feed`, every iOS parser test ported, 20 real feeds parse; malformed feeds are retried and HTML entities written into the XML are understood). The gPodder client of P5 is done and tested live against podfetch; the sync algorithm (`GPodderSync`) comes with P5 proper.
 
 ## Rules for whoever executes this plan
 
@@ -106,7 +106,7 @@ Port `Packages/FeedKit`. Pure Kotlin, parsing with the `XmlPullParser` API: Andr
   "62:03", "3723", "3723.5"; null for 0 or more than 7 days), enclosure or `media:content` (url, type,
   length; 0 → null), link, image, season, episode, episodeType, explicit, `podcast:chapters` URL, inline
   Podlove Simple Chapters, `podcast:transcript` (url, type, language), `podcast:person`. Items without an
-  enclosure are dropped.
+  enclosure are kept, as the iOS code and its tests do; the library layer hides what can't play.
 - Dates: ISO 8601 (with or without fractions, date only) and RFC 822 variants with named zones (UT, Z,
   EDT, EST, CDT, CST, MDT, MST, PDT, PST, CEST, CET), parsed with a fixed locale.
 - URLs trimmed, spaces → `%20`, protocol-relative → https, http/https only.

@@ -1,0 +1,23 @@
+{
+  "comment": "The Android mirror of the iOS apps' Theme.swift values. TokenTest checks Tokens.kt and Accent.kt against this file.",
+  "colors": {
+    "background":    { "light": "#FFFFFF", "dark": "#000000" },
+    "backgroundAlt": { "light": "#F7F7F8", "dark": "#0C0C0E" },
+    "card":          { "light": "#FFFFFF", "dark": "#131316" },
+    "foreground":    { "light": "#1D1D1F", "dark": "#F5F5F7" },
+    "muted":         { "light": "#6E6E73", "dark": "#98989D" },
+    "border":        { "light": "#E5E5E7", "dark": "#1D1D1F" },
+    "success":       { "light": "#1E8E3E", "dark": "#30D158" },
+    "error":         { "light": "#C41E3A", "dark": "#FF453A" },
+    "markArcs":      { "light": "#D2D2D7", "dark": "#2C2C2E" }
+  },
+  "accent": {
+    "music":   { "light": "#D63A6A", "dark": "#FF6482" },
+    "book":    { "light": "#7A4A2B", "dark": "#D7A97C" },
+    "podcast": { "light": "#0A6E9C", "dark": "#29ABE2" }
+  },
+  "family": ["#FABB05", "#29ABE2", "#FF3B30", "#FFCC00", "#34C759"],
+  "markCore": "#6E44FF",
+  "spacing": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32, "screenEdge": 16 },
+  "minTarget": 48
+}

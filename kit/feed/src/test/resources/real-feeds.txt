@@ -1,0 +1,22 @@
+# Public podcast feeds for `./gradlew :kit:feed:realFeeds`: big hosts, small hosts, Podcasting 2.0
+# feeds with chapters and transcripts. One URL per line.
+https://feeds.npr.org/510289/podcast.xml
+https://feeds.npr.org/500005/podcast.xml
+https://feeds.simplecast.com/54nAGcIl
+https://feeds.simplecast.com/EmVW7VGp
+https://podcasts.files.bbci.co.uk/p02nq0gn.rss
+https://www.thisamericanlife.org/podcast/rss.xml
+https://feeds.99percentinvisible.org/99percentinvisible
+https://feeds.twit.tv/twit.xml
+https://changelog.com/podcast/feed
+https://feed.syntax.fm/rss
+https://lexfridman.com/feed/podcast/
+https://atp.fm/rss
+https://www.relay.fm/connected/feed
+https://mp3s.nashownotes.com/pc20rss.xml
+https://feed.nashownotes.com/rss.xml
+https://feeds.fireside.fm/linuxunplugged/rss
+https://feeds.fireside.fm/selfhosted/rss
+https://feeds.buzzsprout.com/231452.rss
+https://feeds.libsyn.com/60664/rss
+https://feeds.megaphone.fm/darknetdiaries

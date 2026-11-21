@@ -1,7 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Strings shared by the core modules of the three own.audio apps. -->
+    <!-- Strings shared by the core modules of the three own.audio apps. Same wording in all
+         three; tools/sibling-drift.sh checks it. -->
     <string name="settings">Settings</string>
     <string name="error_title">That Didn\'t Work</string>
     <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="done">Done</string>
+    <string name="remove">Remove</string>
+    <string name="turn_off">Turn Off</string>
+    <string name="couldnt_load">Couldn\'t Load</string>
+    <string name="try_again">Try Again</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="now_playing">Now Playing</string>
+    <string name="download">Download</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="remove_download">Remove Download</string>
+    <string name="remove_download_question">Remove Download?</string>
+    <string name="remove_these_downloads">Remove These Downloads</string>
+    <string name="downloading_n_of_m">Downloading %1$d of %2$d</string>
+    <string name="shared_with_family">Shared with the family</string>
+    <string name="continue_with_google">Continue with Google</string>
+    <string name="free_and_open_source">Free and open source · MPL-2.0</string>
+    <string name="accent_color">Accent Color</string>
+    <string name="accent_footer">For buttons, links and what\'s playing. The icon and the widgets keep the app\'s color.</string>
+    <string name="accent_app">App Color</string>
+    <string name="accent_blue">Blue</string>
+    <string name="accent_indigo">Indigo</string>
+    <string name="accent_purple">Purple</string>
+    <string name="accent_pink">Pink</string>
+    <string name="accent_red">Red</string>
+    <string name="accent_orange">Orange</string>
+    <string name="accent_yellow">Yellow</string>
+    <string name="accent_green">Green</string>
+    <string name="accent_teal">Teal</string>
+    <string name="accent_brown">Brown</string>
+    <string name="accent_graphite">Graphite</string>
 </resources>
