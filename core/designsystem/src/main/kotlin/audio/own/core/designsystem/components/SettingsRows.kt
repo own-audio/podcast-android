@@ -45,7 +45,7 @@ fun SettingsSection(
                 modifier = Modifier.padding(start = Tokens.Spacing.lg, bottom = Tokens.Spacing.xs).semantics { heading() },
             )
         }
-        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = palette.backgroundAlt) {
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = palette.backgroundAlt, contentColor = palette.foreground) {
             Column(content = content)
         }
         if (footer != null) {
