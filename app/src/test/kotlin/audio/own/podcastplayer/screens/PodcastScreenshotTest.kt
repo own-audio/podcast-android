@@ -66,6 +66,7 @@ import java.util.UUID
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import audio.own.podcastplayer.ui.TabsScreen
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -144,6 +145,7 @@ class PodcastScreenshotTest {
         chapters = chapters.map { SpokenChapter(it.title, it.startMs, it.endMs!!) },
         sleepRemainingSecs = 14 * 60.0 + 32,
         skip = SkipIntervals(15, 30),
+        savedAheadMs = 12 * 60_000,
     )
 
     @Composable
@@ -324,4 +326,16 @@ class PodcastScreenshotTest {
 
     @Test fun formsLight() = shoot("forms_light", false) { Forms() }
     @Test @Config(qualifiers = "+cs") fun formsCzech() = shoot("forms_cs", false) { Forms() }
+
+    // Every screen at twice the font size, the ones above included.
+    @Test @Config(fontScale = 2f) fun showSettingsLargestText() = shoot("show_settings_font200", false) { ShowSettingsPage() }
+    @Test @Config(fontScale = 2f) fun formsLargestText() = shoot("forms_font200", false) { Forms() }
+    @Test @Config(fontScale = 2f) fun summaryLargestText() = shoot("episode_summary_font200", false) { Summary() }
+    @Test @Config(fontScale = 2f) fun discoverSearchLargestText() = shoot("discover_search_font200", false) { DiscoverSearch() }
+
+    // A tablet in landscape: the tabs as a rail, lists a readable width, the player in a column.
+    @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletNewEpisodes() = shoot("tablet_new_episodes", false) { TabsScreen { NewEpisodes() } }
+    @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletShows() = shoot("tablet_shows", true) { TabsScreen { Shows() } }
+    @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletPlayer() = shoot("tablet_player", false) { Player() }
+    @Test @Config(qualifiers = "w673dp-h841dp-mdpi") fun foldableShow() = shoot("foldable_show", false) { TabsScreen { ShowPage() } }
 }

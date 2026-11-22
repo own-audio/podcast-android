@@ -51,6 +51,7 @@ import audio.own.kit.ownaudio.questions
 import audio.own.kit.ownaudio.summarize
 import audio.own.kit.ownaudio.summary
 import audio.own.podcastplayer.R
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.app.UiText
 import audio.own.podcastplayer.app.text
 import audio.own.podcastplayer.app.userMessage
@@ -226,7 +227,7 @@ fun EpisodeSummarySection(
     val palette = LocalPalette.current
     var confirmingClear by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.sm)) {
-        Text(stringResource(R.string.summary), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.summary), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading())
         val lengths = listOf(SummaryLength.SHORT to R.string.summary_short, SummaryLength.MEDIUM to R.string.summary_medium, SummaryLength.LONG to R.string.summary_long)
         val lengthLabel = stringResource(R.string.summary_length)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().semantics { contentDescription = lengthLabel }) {

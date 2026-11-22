@@ -30,11 +30,11 @@ both (P0).
 | P9 | Settings | ☑ 2026-11-22 (Playback, Streaming, Offline Mode; the Downloads rows come with P8) |
 | P10 | Summaries and Ask (hosted own.audio) | ◐ built 2026-11-22, tested against fakes only (no paid work on real servers) |
 | P11 | Android Auto, widget, deep links, voice, background refresh | ◐ built 2026-11-22; browse tree, search and voice checked through the real media service; still to see: the widget on a home screen, Auto on a head unit |
-| P12 | Localization, accessibility, tablets, misuse tests | ☐ |
+| P12 | Localization, accessibility, tablets, misuse tests | ◐ built 2026-11-22 (headings, labels, 200 % layouts, tablet rail and landscape, keyboard, the fixture feed server, misuse tests); no list-detail layout on tablets; a TalkBack walk on a device still to do |
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P10 and P11 built 2026-11-22. Next: P12 polish (accessibility, tablets, misuse tests, end-to-end with the fixture feed server), the guide, P13 release. Wanted in `:player:spoken` (book-android): a part's length from ExoPlayer, `setChapters` after loading, swapping a part's file in place.
+**Where we stopped:** P12 built 2026-11-22; the player uses `:player:spoken`'s real lengths, late chapters and local copies ("N min saved" is back). Next: the guide pages, P13 release.
 
 ## Rules for whoever executes this plan
 

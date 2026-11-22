@@ -69,6 +69,7 @@ import audio.own.kit.ownaudio.FamilyStorage
 import audio.own.kit.ownaudio.Invite
 import audio.own.kit.ownaudio.Member
 import audio.own.podcastplayer.R as AppR
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.app.forView
 import audio.own.podcastplayer.app.text
 import audio.own.podcastplayer.servers.TextDialog
@@ -178,7 +179,7 @@ private fun Header(household: HouseholdInfo) {
             Icon(Icons.Filled.Groups, contentDescription = null, tint = accent, modifier = Modifier.size(44.dp))
             household.family.image?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(104.dp)) }
         }
-        Text(household.family.name, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(household.family.name, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.asHeading())
         Text(
             pluralStringResource(R.plurals.members_count, household.members.size, household.members.size),
             style = MaterialTheme.typography.bodyMedium,

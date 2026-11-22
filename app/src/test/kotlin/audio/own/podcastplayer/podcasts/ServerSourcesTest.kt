@@ -516,6 +516,86 @@ class ServerSourcesTest {
         runBlocking { eventually { model.episodeAI(SourcedEpisode(ref, episode.copy(transcripts = transcript))) == null } }
         assertTrue("reading whether it is offered asks the server nothing", server.requests.none { it.url.encodedPath.startsWith("/api/v2/summaries") })
     }
+
+    // region Misuse (MisuseTests.swift in spirit; the feed cases are in MisuseTest)
+
+    @Test
+    fun `misuse - the server is removed while its episode plays - the player lets go, the device's shows still play`() {
+        val server = ownAudio().kept()
+        val engine = FakeEngine()
+        val state = MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url))))
+        val model = model(state, engine)
+        onMain { model.load() }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Server Show" } } }
+        val item = SourcedEpisode(SourceRef.Server(UUID.fromString(oaId)), audio.own.podcast.library.Episode(id = "e1", showId = "p1", title = "One"))
+        onMain { model.play(item, startAt = 0) }
+        onMain { model.playLater(item) }
+        assertEquals(item.id, engine.state.value.item?.id)
+
+        state.update { it.copy(servers = emptyList()) }
+        runBlocking { eventually { engine.state.value.item == null } }
+        runBlocking { eventually { model.state.value.upNext.isEmpty() && model.state.value.shows.none { it.show.title == "Server Show" } } }
+        // A late report of the gone episode goes nowhere and breaks nothing.
+        model.player.listener?.onPosition(PodcastPlayer.Report(item.id, 5_000, 0, PodcastPlayer.Reason.PAUSE, time))
+        Thread.sleep(100)
+        assertEquals(0, server.count("PUT", "/api/v2/me/progress/episode/e1"))
+
+        onMain { model.follow(FEED) }
+        val device = model.state.value.inbox.first { it.source == SourceRef.Phone }
+        onMain { model.play(device) }
+        assertEquals(device.id, engine.state.value.item?.id)
+    }
+
+    @Test
+    fun `misuse - a gPodder server that is gone - refresh still works, Sync Now says why`() {
+        val dead = Stub { status(200) }
+        val url = dead.url
+        dead.close()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(gpodderRecord(url)))))
+        onMain { model.load() }
+        val started = System.nanoTime()
+        onMain { model.follow(FEED) }
+        onMain { model.refresh(asked = true) }
+        assertTrue("not stuck on the dead server", java.time.Duration.ofNanos(System.nanoTime() - started) < java.time.Duration.ofSeconds(60))
+        assertEquals(listOf("Feed Show"), model.state.value.shows.map { it.show.title })
+        try {
+            onMain { model.syncNow(gpId) }
+            fail("a dead server can't sync")
+        } catch (_: UserFacingException) {
+        }
+        assertTrue("nothing left marked as syncing", model.state.value.syncing.isEmpty())
+    }
+
+    @Test
+    fun `misuse - offline for a day - the position waits on the device and reaches own_audio with its own time`() {
+        val server = ownAudio().kept()
+        val engine = FakeEngine()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url)))), engine)
+        onMain { model.load() }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Server Show" } } }
+        val item = SourcedEpisode(SourceRef.Server(UUID.fromString(oaId)), audio.own.podcast.library.Episode(id = "e1", showId = "p1", title = "One"))
+        onMain { model.play(item, startAt = 0) }
+        network.update { it.copy(connected = false) }
+        runBlocking { eventually { model.state.value.isOffline } }
+        val pausedAt = time
+        engine.report(PodcastPlayer.Reason.PAUSE, 120_000, pausedAt)
+        time = time.plus(java.time.Duration.ofDays(1))
+        onMain { model.refresh(asked = true) }
+        Thread.sleep(200)
+        val put = "/api/v2/me/progress/episode/e1"
+        assertEquals("nothing sent while offline", 0, server.count("PUT", put))
+        val pending = PendingProgress(RoomValueStore(db, "pending", ListSerializer(PendingProgress.Entry.serializer())))
+        runBlocking { eventually { runBlocking { pending.all() }.isNotEmpty() } }
+
+        network.update { it.copy(connected = true) }
+        runBlocking { eventually(10_000) { server.count("PUT", put) == 1 } }
+        val body = server.requests.last { it.url.encodedPath == put }.body?.utf8().orEmpty()
+        assertTrue(body, "\"position_ms\":120000" in body)
+        assertTrue("the time it was heard, not the time it was sent: $body", pausedAt.toString().removeSuffix("Z") in body)
+        runBlocking { eventually { runBlocking { pending.all() }.isEmpty() } }
+    }
+
+    // endregion
 }
 
 private fun UiTextOf(id: Int) = audio.own.podcastplayer.app.UiText(id)

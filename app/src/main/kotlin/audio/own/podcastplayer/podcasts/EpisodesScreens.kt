@@ -61,6 +61,7 @@ import audio.own.podcast.library.Chapter
 import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcastplayer.R
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.ui.TabBar
 import audio.own.core.strings.R as SR
@@ -182,7 +183,7 @@ fun EpisodeContent(
                 Artwork(episode.imageUrl ?: ui.show?.imageUrl, 96.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
                     ui.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.bodyMedium, color = palette.muted) }
-                    Text(Mojibake.repair(episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(Mojibake.repair(episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.asHeading())
                     Text(ProgressText.line(res, episode, progress), style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = palette.muted)
                     SourceLabel(ui.item.source, sourceName)
                 }
@@ -220,7 +221,7 @@ fun EpisodeContent(
             val listed = chapters.filter { it.isInTableOfContents }
             if (listed.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
-                    Text(stringResource(R.string.chapters), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.chapters), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading())
                     for (chapter in listed) {
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = Tokens.minTarget).clickable { onPlayFrom(chapter.startMs) },

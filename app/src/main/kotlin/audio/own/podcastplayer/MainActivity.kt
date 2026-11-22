@@ -4,9 +4,11 @@ import android.Manifest
 import android.app.SearchManager
 import android.provider.MediaStore
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +31,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Phones stay upright, as on iOS; tablets and unfolded foldables turn with the device.
+        if (resources.configuration.smallestScreenWidthDp < TABLET_MIN_WIDTH_DP) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
         setContent { AppRoot(container) }
         // After a rotation the same intent comes back; it was handled the first time.
         if (savedInstanceState == null) handle(intent)
@@ -48,6 +52,22 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         container.podcasts.setForeground(false)
         super.onStop()
+    }
+
+    /**
+     * A keyboard on a tablet or a Chromebook: Space plays and pauses, Ctrl+← and Ctrl+→ skip,
+     * wherever the app is. A text field or the player takes them first.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val player = container.player
+        if (player.state.value.item != null) {
+            when {
+                keyCode == KeyEvent.KEYCODE_SPACE && !event.isCtrlPressed -> { player.toggle(); return true }
+                keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.isCtrlPressed -> { player.skipBack(); return true }
+                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && event.isCtrlPressed -> { player.skipForward(); return true }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     /**
@@ -93,6 +113,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         val FEED_SCHEMES = setOf("feed", "podcast", "pcast")
+        const val TABLET_MIN_WIDTH_DP = 600
         const val ACTION_CONTINUE = "audio.own.podcastplayer.CONTINUE_LISTENING"
     }
 }

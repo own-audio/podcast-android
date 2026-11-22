@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import audio.own.core.designsystem.theme.LocalPalette
 import audio.own.core.designsystem.theme.Tokens
@@ -63,7 +65,7 @@ fun Page(
         bottomBar = bottomBar,
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.asHeading()) },
                 navigationIcon = {
                     if (onBack != null) {
                         if (closeIsCancel) {
@@ -99,12 +101,14 @@ fun TabBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    /** Lists stay a readable width on a tablet; a grid that fills the width passes null. */
+    maxContentWidth: androidx.compose.ui.unit.Dp? = LIST_MAX_WIDTH,
     content: @Composable () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.asHeading()) },
                 navigationIcon = navigationIcon,
                 actions = actions,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -112,9 +116,14 @@ fun TabBar(
         },
         bottomBar = bottomBar,
     ) { inner ->
-        Box(Modifier.fillMaxSize().padding(inner)) { content() }
+        Box(Modifier.fillMaxSize().padding(inner), contentAlignment = Alignment.TopCenter) {
+            Box(if (maxContentWidth != null) Modifier.widthIn(max = maxContentWidth).fillMaxSize() else Modifier.fillMaxSize()) { content() }
+        }
     }
 }
+
+/** How wide a list of episodes grows on a tablet or an unfolded foldable. */
+val LIST_MAX_WIDTH = 840.dp
 
 /** The text button of a top bar that confirms a form ("Sign In"), or a spinner while it works. */
 @Composable
@@ -210,3 +219,6 @@ fun Section(header: String?, modifier: Modifier = Modifier, footer: String? = nu
         }
     }
 }
+
+/** TalkBack's headings: a page's title and its sections', to jump between with the heading gesture. */
+fun Modifier.asHeading(): Modifier = semantics { heading() }

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Three short episodes for the tests, served by FixtureFeedServer, which puts its own address in
+     place of {{BASE}}: no publisher's server is asked. The audio is the same as podcast-ios's
+     UITests/Fixtures (macOS's `say`, see make-fixtures.sh there). -->
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <title>own.audio Test Fixtures</title>
+    <link>https://github.com/own-audio/podcast-android</link>
+    <description>Short episodes for the app's tests.</description>
+    <itunes:author>own.audio</itunes:author>
+    <item>
+      <title>Fixture Episode 3</title>
+      <guid>fixture-3</guid>
+      <pubDate>Fri, 16 Oct 2026 08:00:00 +0000</pubDate>
+      <enclosure url="{{BASE}}/ep3.m4a" type="audio/mp4" length="52317"/>
+      <itunes:duration>12</itunes:duration>
+      <podcast:chapters url="{{BASE}}/chapters.json" type="application/json+chapters"/>
+    </item>
+    <item>
+      <title>Fixture Episode 2</title>
+      <guid>fixture-2</guid>
+      <pubDate>Thu, 15 Oct 2026 08:00:00 +0000</pubDate>
+      <enclosure url="{{BASE}}/ep2.m4a" type="audio/mp4" length="52558"/>
+      <itunes:duration>12</itunes:duration>
+    </item>
+    <item>
+      <title>Fixture Episode 1</title>
+      <guid>fixture-1</guid>
+      <pubDate>Wed, 14 Oct 2026 08:00:00 +0000</pubDate>
+      <enclosure url="{{BASE}}/ep1.m4a" type="audio/mp4" length="52779"/>
+      <itunes:duration>12</itunes:duration>
+    </item>
+  </channel>
+</rss>

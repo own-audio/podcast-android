@@ -807,8 +807,9 @@ class PodcastModel(
         }
 
         refusedLinks.remove(item.id)
-        val chapters = chapters(item, networkAllowed = true)
+        val chapters = chapters(item)
         player.load(item, show, start, autoplay, show?.settings?.speed ?: settings.defaultRate, chapters = chapters)
+        if (chapters.isEmpty()) fetchChapters(item)
         saveLastPlayed(item, show, start, now())
         if (downloaded != null) downloads.notePlayed(item.id)
     }
@@ -837,28 +838,37 @@ class PodcastModel(
 
     /**
      * The chapters the player starts with: the feed's inline ones (or the server's), else the
-     * feed's chapters document (fetched once, kept for offline, waited for a moment only). With
-     * none, the player reads the file's own marks.
+     * feed's chapters document kept from an earlier play. With none, the player reads the file's
+     * own marks until [fetchChapters] brings the document.
      */
-    private suspend fun chapters(item: SourcedEpisode, networkAllowed: Boolean): List<SpokenChapter> {
+    private suspend fun chapters(item: SourcedEpisode): List<SpokenChapter> {
         val episode = item.episode
         var marks = EpisodeChapters.marks(episode.chapters)
-        val url = episode.chaptersUrl
-        if (marks.isEmpty() && url != null) {
-            val cached = RoomValueStore(db, "chapters/${item.id}", ListSerializer(Chapter.serializer()))
-            marks = EpisodeChapters.marks(cached.load().orEmpty())
-            if (marks.isEmpty() && networkAllowed && !isOffline) {
-                // Fetched on the model's scope, so a slow feed host is waited for only briefly
-                // and the document is still kept for the next play.
-                val fetch = scope.async {
-                    val fetched = runCatching { feeds.chapters(url) }.getOrNull().orEmpty()
-                    fetched.map { Chapter(it.startMs, it.endMs, it.title, it.url, it.imageUrl, it.isInTableOfContents) }.also { if (it.isNotEmpty()) cached.save(it) }
-                }
-                marks = EpisodeChapters.marks(withTimeoutOrNull(CHAPTERS_WAIT_MS) { fetch.await() }.orEmpty())
-            }
-        }
-        return EpisodeChapters.closed(marks, episode.durationMs ?: 0).map { SpokenChapter(it.title, it.startMs, it.endMs ?: it.startMs) }
+        if (marks.isEmpty() && episode.chaptersUrl != null) marks = EpisodeChapters.marks(chaptersStore(item).load().orEmpty())
+        return spokenChapters(marks, episode.durationMs)
     }
+
+    private fun chaptersStore(item: SourcedEpisode) = RoomValueStore(db, "chapters/${item.id}", ListSerializer(Chapter.serializer()))
+
+    /**
+     * The feed's chapters document, fetched once on the model's scope and kept for offline: Play
+     * doesn't wait for a slow feed host; the player takes the chapters when they arrive.
+     */
+    private fun fetchChapters(item: SourcedEpisode) {
+        val url = item.episode.chaptersUrl ?: return
+        if (isOffline) return
+        scope.launch {
+            val fetched = runCatching { feeds.chapters(url) }.getOrNull().orEmpty()
+                .map { Chapter(it.startMs, it.endMs, it.title, it.url, it.imageUrl, it.isInTableOfContents) }
+            if (fetched.isEmpty()) return@launch
+            chaptersStore(item).save(fetched)
+            val late = spokenChapters(EpisodeChapters.marks(fetched), item.episode.durationMs)
+            if (late.isNotEmpty()) player.setChapters(item.id, late)
+        }
+    }
+
+    private fun spokenChapters(marks: List<EpisodeChapters.Mark>, durationMs: Long?): List<SpokenChapter> =
+        EpisodeChapters.closed(marks, durationMs ?: 0).map { SpokenChapter(it.title, it.startMs, it.endMs ?: it.startMs) }
 
     /**
      * Where the player fetches an episode from, asked when its data source opens: the publisher's
@@ -1014,7 +1024,7 @@ class PodcastModel(
             stored[item.id] = ListeningProgress(last.positionMs, held?.played ?: false, last.at)
         }
         val show = _state.value.show(item) ?: last.show
-        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: settings.defaultRate, prepare = false, chapters = chapters(item, networkAllowed = false))
+        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: settings.defaultRate, prepare = false, chapters = chapters(item))
     }
 
     /**
@@ -1485,8 +1495,6 @@ class PodcastModel(
         const val SYNC_DELAY_MS = 5_000L
         private val SYNCING_REASONS = setOf(PodcastPlayer.Reason.PAUSE, PodcastPlayer.Reason.STOP, PodcastPlayer.Reason.FINISHED)
 
-        /** How long Play waits for a feed's chapters document the first time. */
-        const val CHAPTERS_WAIT_MS = 3_000L
         val MIN_REFRESH_INTERVAL: Duration = Duration.ofMinutes(15)
 
         /** What the listener is told when something fails. */

@@ -79,6 +79,7 @@ import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcast.library.SourcedShow
 import audio.own.podcastplayer.R
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.app.text
 import audio.own.podcastplayer.ui.ErrorLine
 import audio.own.podcastplayer.ui.Page
@@ -412,7 +413,7 @@ private fun LazyListScope.discoverHome(
 @Composable
 private fun Header(title: String, footnote: String? = null) {
     Column(Modifier.fillMaxWidth().padding(start = Tokens.Spacing.lg, end = Tokens.Spacing.lg, top = Tokens.Spacing.lg, bottom = Tokens.Spacing.xs)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading())
         footnote?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = LocalPalette.current.muted) }
     }
 }
@@ -528,7 +529,7 @@ fun SearchResultContent(
         Row(Modifier.padding(horizontal = Tokens.Spacing.lg, vertical = Tokens.Spacing.sm), horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
             Artwork(result.imageUrl, 112.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
-                Text(result.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(result.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.asHeading())
                 result.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = palette.muted) }
                 result.genre?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = palette.muted) }
                 result.episodeCount?.let { Text(pluralStringResource(R.plurals.episodes_count, it, it), style = MaterialTheme.typography.labelMedium, color = palette.muted) }

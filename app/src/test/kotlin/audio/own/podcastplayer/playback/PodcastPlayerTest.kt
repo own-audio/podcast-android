@@ -124,6 +124,47 @@ class PodcastPlayerTest {
     }
 
     @Test
+    fun `chapters that arrive after the start replace the file's`() {
+        player.load(episode("e1", 6_000), show, 0, autoplay = false, rate = 1f)
+        ready()
+        val late = listOf(SpokenChapter("Hello", 0, 3_000), SpokenChapter("Goodbye", 3_000, 6_000))
+        player.setChapters("other", late)
+        idle()
+        assertTrue("another episode's are ignored", player.state.value.chapters.none { it.title == "Hello" })
+        player.setChapters(player.state.value.item!!.id, late)
+        idle()
+        assertEquals(listOf("Hello", "Goodbye"), player.state.value.chapters.map { it.title })
+        player.seekTo(4_000)
+        idle()
+        assertEquals("Goodbye", player.state.value.currentChapter?.title)
+    }
+
+    @Test
+    fun `a resume past the feed's length is kept, and the file's length arrives`() {
+        player.load(episode("e1", 3_000), show, 4_500, autoplay = false, rate = 1f)
+        ready()
+        assertTrue("${player.state.value.positionMs}", player.state.value.positionMs in 4_400..4_700)
+        assertTrue(player.state.value.durationMs in 5_900..6_100)
+    }
+
+    @Test
+    fun `a finished download takes over in place, paused, at the same position`() {
+        val download = File(folder.root, "download.mp3").apply { writeBytes(file.readBytes()) }
+        var local = Uri.fromFile(file)
+        player.localFile = { local }
+        val item = episode("e1", 6_000)
+        player.load(item, show, 2_000, autoplay = false, rate = 1f)
+        ready()
+        local = Uri.fromFile(download)
+        player.useLocalCopy(item.id)
+        ready()
+        assertEquals(Uri.fromFile(download), exo.currentMediaItem?.localConfiguration?.uri)
+        assertTrue("${player.state.value.positionMs}", player.state.value.positionMs in 1_900..2_100)
+        assertEquals("the same episode, not a new load", 1, exo.mediaItemCount)
+        assertTrue("no stop or switch reported", reports.none { it.reason == PodcastPlayer.Reason.STOP || it.reason == PodcastPlayer.Reason.SWITCH })
+    }
+
+    @Test
     fun `back after a relaunch it waits paused, and opens nothing until Play`() {
         val item = episode("e1", 6_000)
         player.load(item, show, 2_000, autoplay = false, rate = 1.5f, prepare = false)

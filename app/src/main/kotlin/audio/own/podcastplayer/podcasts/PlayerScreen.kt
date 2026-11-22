@@ -2,6 +2,7 @@ package audio.own.podcastplayer.podcasts
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -65,11 +67,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -88,6 +99,7 @@ import audio.own.player.core.SleepTimer
 import audio.own.player.spoken.SpeedText
 import audio.own.podcast.library.UpNext
 import audio.own.podcastplayer.R
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.playback.PodcastPlayer
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
@@ -172,7 +184,23 @@ fun PlayerContent(
 ) {
     val palette = LocalPalette.current
     var sheet by remember { mutableStateOf(initialSheet) }
+    val focus = remember { FocusRequester() }
     Scaffold(
+        // A keyboard on a tablet or a Chromebook: Space plays and pauses, Ctrl+← and Ctrl+→ skip,
+        // Esc closes the player. A sheet open over it takes the keys itself.
+        modifier = Modifier
+            .focusRequester(focus)
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || sheet != null || player.item == null && event.key != Key.Escape) return@onKeyEvent false
+                when {
+                    event.key == Key.Spacebar -> { actions.toggle(); true }
+                    event.key == Key.DirectionLeft && event.isCtrlPressed -> { actions.skipBack(); true }
+                    event.key == Key.DirectionRight && event.isCtrlPressed -> { actions.skipForward(); true }
+                    event.key == Key.Escape -> { onClose(); true }
+                    else -> false
+                }
+            },
         topBar = {
             TopAppBar(
                 title = {},
@@ -186,6 +214,7 @@ fun PlayerContent(
             )
         },
     ) { inner ->
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
         val item = player.item
         if (item == null) {
             Box(Modifier.fillMaxSize().padding(inner), contentAlignment = Alignment.Center) {
@@ -217,7 +246,7 @@ fun PlayerContent(
                     }
                 }
                 Column(Modifier.padding(horizontal = Tokens.Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
-                    Text(Mojibake.repair(item.episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(Mojibake.repair(item.episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.asHeading())
                     player.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.bodyMedium, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     if (player.hasChapters) {
                         TextButton(onClick = { sheet = PlayerSheet.CHAPTERS }) {
@@ -276,6 +305,15 @@ private fun Scrubber(player: PodcastPlayer.State, actions: PlayerActions) {
                 Icon(Icons.Filled.WifiOff, contentDescription = null, modifier = Modifier.size(14.dp))
                 Text(stringResource(R.string.no_signal), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
             }
+        } else {
+            val saved = player.savedAheadMs?.let { it / 60_000 }?.takeIf { it > 0 }
+            if (saved != null) {
+                // How long the episode plays on with no signal: worth knowing before the metro.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Filled.DownloadForOffline, contentDescription = null, tint = palette.muted, modifier = Modifier.size(14.dp))
+                    Text(pluralStringResource(R.plurals.minutes_saved, saved.toInt(), saved.toInt()), style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), color = palette.muted)
+                }
+            }
         }
     }
 }
@@ -290,11 +328,12 @@ private fun Transport(player: PodcastPlayer.State, actions: PlayerActions) {
             SkipIcon(back = true, seconds = player.skip.backSecs, size = 36.dp)
         }
         val playLabel = stringResource(if (player.isPlaying) SR.string.pause else SR.string.play)
-        IconButton(onClick = { haptics.performHapticFeedback(HapticFeedbackType.ContextClick); actions.toggle() }, modifier = Modifier.size(80.dp)) {
+        // The label is on the button, so it is read while the ring of a load stands in for the icon.
+        IconButton(onClick = { haptics.performHapticFeedback(HapticFeedbackType.ContextClick); actions.toggle() }, modifier = Modifier.size(80.dp).semantics { contentDescription = playLabel }) {
             if (player.isLoading) {
                 CircularProgressIndicator(Modifier.size(48.dp))
             } else {
-                Icon(if (player.isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle, contentDescription = playLabel, tint = palette.foreground, modifier = Modifier.size(72.dp))
+                Icon(if (player.isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle, contentDescription = null, tint = palette.foreground, modifier = Modifier.size(72.dp))
             }
         }
         val forward = stringResource(R.string.skip_forward_seconds, player.skip.forwardSecs)
@@ -368,7 +407,7 @@ fun SpeedSheet(rate: Float, onRate: (Float) -> Unit, onDismiss: () -> Unit) {
 fun SpeedBody(rate: Float, onRate: (Float) -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.fillMaxWidth().padding(Tokens.Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl)) {
-        Text(stringResource(R.string.speed), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.speed), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading())
         Text(SpeedText.text(rate), style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl)) {
             FilledIconButton(onClick = { onRate(rate - 0.05f) }, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.RemoveCircle, contentDescription = stringResource(R.string.slower)) }
@@ -401,7 +440,7 @@ fun SleepSheet(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: (
 fun SleepBody(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = Tokens.Spacing.xl)) {
-        Text(stringResource(R.string.sleep_timer), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
+        Text(stringResource(R.string.sleep_timer), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading().padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
         if (player.sleeping) {
             val remaining = player.sleepRemainingSecs
             when {
@@ -451,7 +490,7 @@ fun ChaptersBody(player: PodcastPlayer.State, actions: PlayerActions, onDismiss:
     val current = player.currentChapter
     val list = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(player.chapters.indexOf(current) - 2, 0))
     Column {
-        Text(stringResource(R.string.chapters), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
+        Text(stringResource(R.string.chapters), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading().padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
         LazyColumn(state = list, modifier = Modifier.padding(bottom = Tokens.Spacing.xl)) {
             itemsIndexed(player.chapters) { _, chapter ->
                 Row(
@@ -489,7 +528,7 @@ fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boo
     val palette = LocalPalette.current
     Column(Modifier.padding(bottom = Tokens.Spacing.xl)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.xl), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.up_next), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.up_next), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading().weight(1f))
             if (entries.isNotEmpty()) TextButton(onClick = actions::clearQueue) { Text(stringResource(R.string.clear_up_next), color = palette.error) }
         }
         if (entries.isEmpty()) {
@@ -502,19 +541,35 @@ fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boo
         } else {
             LazyColumn {
                 itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { actions.playQueued(entry); onDismiss() }.padding(start = Tokens.Spacing.xl, end = Tokens.Spacing.sm, top = Tokens.Spacing.sm, bottom = Tokens.Spacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md),
-                    ) {
-                        Artwork(entry.episode.imageUrl ?: entry.show?.imageUrl, 44.dp)
-                        Column(Modifier.weight(1f)) {
-                            entry.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.labelMedium, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            Text(Mojibake.repair(entry.episode.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // At accessibility font sizes the buttons go under the words, as the episode rows do.
+                    val stacked = LocalDensity.current.fontScale >= STACKED_FONT_SCALE
+                    val words: @Composable (Modifier) -> Unit = { modifier ->
+                        Column(modifier) {
+                            entry.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.labelMedium, color = palette.muted, maxLines = if (stacked) 2 else 1, overflow = TextOverflow.Ellipsis) }
+                            Text(Mojibake.repair(entry.episode.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = if (stacked) 4 else 2, overflow = TextOverflow.Ellipsis)
                         }
+                    }
+                    val buttons: @Composable () -> Unit = {
                         IconButton(onClick = { actions.moveQueued(index, index - 1) }, enabled = index > 0) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.move_up)) }
                         IconButton(onClick = { actions.moveQueued(index, index + 1) }, enabled = index < entries.lastIndex) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.move_down)) }
                         IconButton(onClick = { actions.removeQueued(entry) }) { Icon(Icons.Filled.Delete, contentDescription = stringResource(SR.string.remove)) }
+                    }
+                    val row = Modifier.fillMaxWidth().clickable { actions.playQueued(entry); onDismiss() }.padding(start = Tokens.Spacing.xl, end = Tokens.Spacing.sm, top = Tokens.Spacing.sm, bottom = Tokens.Spacing.sm)
+                    if (stacked) {
+                        Column(row, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
+                                Artwork(entry.episode.imageUrl ?: entry.show?.imageUrl, 44.dp)
+                                Spacer(Modifier.weight(1f))
+                                buttons()
+                            }
+                            words(Modifier.fillMaxWidth())
+                        }
+                    } else {
+                        Row(row, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
+                            Artwork(entry.episode.imageUrl ?: entry.show?.imageUrl, 44.dp)
+                            words(Modifier.weight(1f))
+                            buttons()
+                        }
                     }
                 }
             }

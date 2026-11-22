@@ -103,6 +103,10 @@
     <string name="nothing_up_next_text">Add episodes with Play Next or Play Later from their menu.</string>
     <string name="clear_up_next">Clear Up Next</string>
     <string name="then_new_episodes">Then the newest new episodes play on.</string>
+    <plurals name="minutes_saved">
+        <item quantity="one">%d min saved</item>
+        <item quantity="other">%d min saved</item>
+    </plurals>
     <string name="position_of">%1$s of %2$s</string>
     <string name="continue_title">Continue from another device?</string>
     <string name="continue_from">Continue from %s</string>

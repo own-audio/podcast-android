@@ -73,6 +73,7 @@ import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcast.library.SourcedShow
 import audio.own.podcastplayer.R
+import audio.own.podcastplayer.ui.asHeading
 import audio.own.podcastplayer.app.UiText
 import audio.own.podcastplayer.app.text
 import audio.own.podcastplayer.onboarding.FormTextField
@@ -143,6 +144,7 @@ fun ShowsContent(
     var sorting by remember { mutableStateOf(false) }
     TabBar(
         title = stringResource(R.string.tab_shows),
+        maxContentWidth = null,
         actions = {
             IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_a_show)) }
             Box {
@@ -334,7 +336,7 @@ fun ShowContent(
                         Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
                             Artwork(show.show.imageUrl, 112.dp)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
-                                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.asHeading())
                                 show.show.author?.let { Text(Mojibake.repair(it), style = MaterialTheme.typography.bodyMedium, color = palette.muted) }
                                 SourceLabel(show.source, sourceName)
                                 if (sharedWithFamily) {
@@ -399,7 +401,7 @@ fun ShowContent(
 @Composable
 fun SimilarShows(shows: List<ShowSearchResult>, onOpen: (ShowSearchResult) -> Unit) {
     Column(Modifier.padding(vertical = Tokens.Spacing.md), verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.sm)) {
-        Text(stringResource(R.string.similar_shows), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Tokens.Spacing.lg))
+        Text(stringResource(R.string.similar_shows), style = MaterialTheme.typography.titleMedium, modifier = Modifier.asHeading().padding(horizontal = Tokens.Spacing.lg))
         LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Tokens.Spacing.lg), horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
             items(shows, key = { it.id }) { show ->
                 Column(Modifier.width(112.dp).clickable { onOpen(show) }, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {

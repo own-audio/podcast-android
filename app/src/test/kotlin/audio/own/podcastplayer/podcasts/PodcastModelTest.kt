@@ -95,6 +95,11 @@ class FakeEngine : PlaybackEngine {
     override fun useLocalCopy(id: String) {
         localCopies += id
     }
+    val lateChapters = mutableListOf<Pair<String, List<SpokenChapter>>>()
+    override fun setChapters(id: String, chapters: List<SpokenChapter>) {
+        lateChapters += id to chapters
+        if (_state.value.item?.id == id) _state.update { it.copy(chapters = chapters) }
+    }
     override fun setSkipIntervals(skip: SkipIntervals) = _state.update { it.copy(skip = skip) }
     override fun setKeepAhead(ms: Long) {
         keepAheadMs = ms

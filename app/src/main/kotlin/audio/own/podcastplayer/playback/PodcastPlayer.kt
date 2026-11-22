@@ -3,7 +3,6 @@ package audio.own.podcastplayer.playback
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
-import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
@@ -41,10 +40,9 @@ import kotlinx.coroutines.launch
  * reasons know, the episode held paused after a relaunch until Play, and a download taking over
  * from the stream.
  *
- * The part is given a long span rather than the feed's duration: feeds often leave it out or
- * get it wrong (an inserted ad makes the file longer), and the spoken timeline would stop the
- * position there. The real length comes from the player once it has opened the file. Use it
- * from the main thread.
+ * The part starts with the feed's duration, which feeds often leave out or get wrong (an
+ * inserted ad makes the file longer); the spoken player takes the file's real length once it
+ * has opened it. Use it from the main thread.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class PodcastPlayer(
@@ -88,6 +86,8 @@ class PodcastPlayer(
         val sleepAtEndOfChapter: Boolean = false,
         val problem: Problem? = null,
         val skip: SkipIntervals = SkipIntervals(DEFAULT_SKIP_BACK, DEFAULT_SKIP_FORWARD),
+        /** How much of what comes next is on the device already: how long it plays on with no signal. */
+        val savedAheadMs: Long? = null,
     ) {
         val hasChapters: Boolean get() = chapters.isNotEmpty()
 
@@ -127,8 +127,6 @@ class PodcastPlayer(
     /** Set while the same episode is loaded again (its download arrived): its STOP is a seek. */
     private var reloading = false
 
-    /** A download of the episode playing, waiting for the next pause to take over. */
-    private var localWaiting: String? = null
     private var controller: ListenableFuture<MediaController>? = null
 
     init {
@@ -142,12 +140,6 @@ class PodcastPlayer(
             }
         }
         scope.launch { spoken.state.collect { publish(it) } }
-        // The file's real length arrives with the timeline, which the spoken state doesn't carry.
-        spoken.player.addListener(object : Player.Listener {
-            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) = publish(spoken.state.value)
-
-            override fun onPlaybackStateChanged(playbackState: Int) = publish(spoken.state.value)
-        })
     }
 
     // region Loading
@@ -158,7 +150,6 @@ class PodcastPlayer(
      * or the server's; with none, the player reads the file's own.
      */
     override fun load(item: SourcedEpisode, show: Show?, startMs: Long, autoplay: Boolean, rate: Float, prepare: Boolean, chapters: List<SpokenChapter>) {
-        localWaiting = null
         val normalized = PlaybackSpeed.normalized(rate)
         this.rate = normalized
         if (!prepare) {
@@ -173,24 +164,30 @@ class PodcastPlayer(
         val before = spoken.bookId
         this.item = item
         this.show = show
-        val book = book(item, show, chapters)
         val start = startMs.coerceAtLeast(0)
+        val book = book(item, show, chapters, start)
         when (before) {
             null -> spoken.load(book, start, autoplay, normalized)
             item.id -> reloadingDo { spoken.load(book, start, autoplay, normalized) }
             else -> switchingDo { spoken.load(book, start, autoplay, normalized) }
         }
+        // ExoPlayer keeps "play when ready" across a stop and a new item: one loaded not to play
+        // would start by itself after an episode that was playing.
+        if (!autoplay && spoken.player.playWhenReady) spoken.player.playWhenReady = false
         if (autoplay) ensureService()
         publish(spoken.state.value)
     }
 
-    private fun book(item: SourcedEpisode, show: Show?, chapters: List<SpokenChapter>): SpokenBook {
+    private fun book(item: SourcedEpisode, show: Show?, chapters: List<SpokenChapter>, startMs: Long): SpokenBook {
         val episode = item.episode
         val local = localFile(item.id)
+        // A position past the feed's length (the file is longer than it says) would be held to
+        // it; unknown, the part is open-ended until the player tells the real length.
+        val stated = episode.durationMs?.takeIf { it > startMs } ?: 0
         val part = SpokenPart(
             id = PART_ID,
             uri = local?.toString() ?: PlaybackUris.forItem(item.id).toString(),
-            durationMs = span(episode.durationMs),
+            durationMs = stated,
             streamsByRange = true,
             contentType = episode.audioType,
         )
@@ -231,27 +228,27 @@ class PodcastPlayer(
 
     /**
      * A download of [id] finished. The loaded episode moves to the file at once when paused, else
-     * at the next pause: never mid-sentence.
+     * at the next pause or seek: never mid-sentence. Waiting for a signal, the file ends the wait.
      */
     override fun useLocalCopy(id: String) {
-        if (item?.id != id || held != null) return
-        val loaded = spoken.currentBook ?: return
-        if (loaded.parts.firstOrNull()?.uri?.startsWith("file:") == true) return
-        if (spoken.player.playWhenReady) {
-            localWaiting = id
-            return
-        }
-        reloadFromFile(loaded)
+        if (item?.id != id || held != null || spoken.bookId != id) return
+        val local = localFile(id) ?: return
+        spoken.useLocalCopy(0, local.toString())
     }
 
-    private fun reloadFromFile(loaded: SpokenBook) {
-        localWaiting = null
-        val current = item ?: return
-        if (localFile(current.id) == null) return
-        val position = spoken.positionMs()
-        val sleep = spoken.state.value.sleepEnd
-        reloadingDo { spoken.load(book(current, show, loaded.serverChapters), position, autoplay = false, speed = spoken.player.playbackParameters.speed) }
-        sleep?.let(spoken::sleepAt)
+    /**
+     * The feed's chapters for [id], arrived after it started (a chapters document fetched
+     * meanwhile): next and previous, End of Chapter and the chapter list go by them from now on.
+     */
+    override fun setChapters(id: String, chapters: List<SpokenChapter>) {
+        if (item?.id != id) return
+        val waiting = held
+        if (waiting != null) {
+            held = waiting.copy(chapters = chapters)
+            publish(spoken.state.value)
+            return
+        }
+        if (spoken.bookId == id) spoken.setChapters(chapters)
     }
 
     // endregion
@@ -316,7 +313,6 @@ class PodcastPlayer(
         held = null
         item = null
         show = null
-        localWaiting = null
         spoken.stop()
         controller?.let { MediaController.releaseFuture(it) }
         controller = null
@@ -414,14 +410,14 @@ class PodcastPlayer(
                 else -> null
             },
             skip = skip,
+            savedAheadMs = s.savedAheadMs.takeIf { !s.waitingForSignal && book.parts.firstOrNull()?.uri?.startsWith("file:") != true },
         )
-        if (localWaiting == book.id && !s.playWhenReady) scope.launch { spoken.currentBook?.takeIf { it.id == localWaiting }?.let(::reloadFromFile) }
     }
 
     /** The file's length once the player knows it, else what the feed or the server said. */
     private fun realDurationMs(id: String): Long {
-        val known = spoken.player.duration
-        if (known != C.TIME_UNSET && known > 0 && spoken.bookId == id && spoken.player.playbackState != Player.STATE_IDLE) return known
+        val known = spoken.state.value.durationMs
+        if (known > 0 && spoken.bookId == id) return known
         return item?.takeIf { it.id == id }?.episode?.durationMs ?: 0
     }
 
@@ -444,11 +440,6 @@ class PodcastPlayer(
         const val DEFAULT_SKIP_BACK = 15
         const val DEFAULT_SKIP_FORWARD = 30
         const val PART_ID = "episode"
-
-        /** Longer than any episode; twice the stated length for one that says it is longer still. */
-        fun span(statedMs: Long?): Long = maxOf(MIN_SPAN_MS, (statedMs ?: 0) * 2)
-
-        private const val MIN_SPAN_MS = 24 * 3_600_000L
 
         private val NEIGHBOUR_COMMANDS = setOf(
             Player.COMMAND_SEEK_TO_PREVIOUS,
@@ -493,6 +484,9 @@ interface PlaybackEngine {
 
     /** A download of [id] finished: the episode loaded now plays from the file from the next pause on. */
     fun useLocalCopy(id: String) {}
+
+    /** Chapters for [id] that arrived after it was loaded. */
+    fun setChapters(id: String, chapters: List<SpokenChapter>) {}
 
     /** The loaded item and its position, for Media3's playback resumption. */
     @androidx.annotation.OptIn(UnstableApi::class)
