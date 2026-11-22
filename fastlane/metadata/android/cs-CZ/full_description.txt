@@ -1,0 +1,36 @@
+Přehrávač podcastů pro telefony a tablety s Androidem, který nepotřebuje účet ani server: najděte pořad, nebo vložte adresu jeho kanálu, a poslouchejte.
+
+Stvořený pro poslech
+• Rychlost se zachovanou výškou hlasu a vlastní rychlost pro kterýkoli pořad
+• Kapitoly, pokud je pořad má
+• Skok vzad a vpřed o sekundy, které si zvolíte, a chytré přetočení po pauze
+• Časovač spánku
+• Ovládání v oznámení a na zamčené obrazovce
+
+Nejdřív to nové
+• Nové epizody ukazují nepřehrané epizody ze všech vašich pořadů, od nejnovějších
+• Stránka každého pořadu s jeho epizodami; poznámky ke každé epizodě s funkčními odkazy
+• Na řadě: epizody z kteréhokoli pořadu, v pořadí, jaké chcete
+• Hledání pořadu podle názvu, procházení podle kategorií, nebo přidání podle adresy kanálu
+
+Offline
+• Stahujte jednotlivé epizody, nebo ať pořad stahuje své nejnovější sám
+• Přehrané epizody smazat a od každého pořadu nechat nejvýš několik
+• Stahování běží na pozadí; jen přes Wi-Fi a s limitem úložiště, pokud chcete
+
+Vaše místo zůstane
+• Pozice v každé epizodě se ukládá nejdřív v telefonu, takže výpadek signálu nikdy neztratí vaše místo
+
+V autě i na ploše
+• Android Auto, widget Na řadě a hlasové hledání s Asistentem
+
+S vlastním serverem
+Pokud ho máte, přidejte ho a vaše pořady i pozice vás budou sledovat mezi zařízeními:
+• own.audio: podcastová knihovna vaší rodiny
+• Audiobookshelf: vaše knihovny podcastů
+• Synchronizační služby gPodder, například gpodder.net a podfetch
+Přidat můžete několik serverů najednou; přepínač v Nových epizodách vybírá, který vidíte.
+
+Soukromí už od návrhu: žádný účet u nás, žádná analytika, žádné reklamy, žádné sledování. Aplikace mluví jen s kanály a servery, které si zvolíte, s Applovým katalogem podcastů, když hledáte nebo procházíte, a ve verzi z Google Play s Googlem, pokud se přes něj přihlásíte.
+
+Česky a anglicky. Zdarma a open source pod licencí MPL-2.0. Vytvořilo own.audio.

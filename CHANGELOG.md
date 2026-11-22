@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- Release preparation: a release workflow for tags (both flavours' APKs and the Play bundle, signed when the repository has the key), the guide published by GitHub Pages, store texts in English and Czech with the 512 px icon (also F-Droid's layout), the APK size budget per app, and docs/release.md with the maintainer's steps.
 - Adding an account the app already has (the same server and the same user) is refused with "This server is already added. To sign in again, open it in Settings."; another user on the same server can still be added.
 - The user guide (`guide/`, for GitHub Pages): every screen, with screenshots.
 - A book or episode loaded to be shown paused no longer starts playing by itself after the previous one played (the shared spoken player).

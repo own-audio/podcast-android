@@ -27,6 +27,9 @@ tier1=(
   docs/design-tokens.json
   tools/sibling-drift.sh
   tools/apk-size.sh
+  tools/store-icon.py
+  .github/workflows/release.yml
+  .github/workflows/pages.yml
   core/common/src
   core/network/src
   core/servers/src
