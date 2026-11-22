@@ -77,6 +77,26 @@ class MediaTest {
     }
 
     @Test
+    fun `narration - a retried start sends the same key and the same bytes`() = runBlocking {
+        val source = File.createTempFile("book-", ".txt").apply { writeText("Chapter one.") }
+        try {
+            StubServer {
+                json("""{"id":"j1","title":"Night","stages":[],"stage":"queued","error":null,"chapters":[],"download_url":null,"book_id":null,"quoted_price_cents":600,"actual_cost_cents":null,"charged_price_cents":null,"currency":"USD"}""", 201)
+            }.use { stub ->
+                val client = stub.client()
+                repeat(2) { client.createNarration(source, "Night", "en", "en", "v", NarrationOutput.MULTI_FILE, idempotencyKey = "narr-1") }
+                val (first, second) = stub.requests
+                assertEquals("narr-1", first.headers["Idempotency-Key"])
+                assertEquals("narr-1", second.headers["Idempotency-Key"])
+                assertEquals(first.headers["Content-Type"], second.headers["Content-Type"])
+                assertEquals(first.text(), second.text())
+            }
+        } finally {
+            source.delete()
+        }
+    }
+
+    @Test
     fun `podcasts - follow by feed, unfollow, refresh, episodes, the directory`() = runBlocking {
         StubServer {
             when (it.method to it.url.encodedPath) {

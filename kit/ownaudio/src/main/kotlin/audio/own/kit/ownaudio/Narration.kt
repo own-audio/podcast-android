@@ -84,6 +84,8 @@ suspend fun OwnAudioClient.createNarration(
     targetLanguage: String,
     voiceId: String,
     output: NarrationOutput,
+    /** The same key for every attempt at one narration, so a retry never starts a second paid job. */
+    idempotencyKey: String? = null,
 ): NarrationJob = multipart(
     "narration/jobs",
     listOf(
@@ -92,21 +94,33 @@ suspend fun OwnAudioClient.createNarration(
     ),
     file,
     NarrationJob.serializer(),
+    idempotencyKey,
 )
 
 suspend fun OwnAudioClient.narration(id: String): NarrationJob = getJson("narration/jobs/$id")
 
 /** A multipart POST with the file streamed from disk, signed like every other call. */
-internal suspend fun <T> OwnAudioClient.multipart(path: String, fields: List<Pair<String, String>>, file: File, serializer: KSerializer<T>): T {
+internal suspend fun <T> OwnAudioClient.multipart(
+    path: String,
+    fields: List<Pair<String, String>>,
+    file: File,
+    serializer: KSerializer<T>,
+    idempotencyKey: String? = null,
+): T {
     if (isOffline()) throw OwnAudioException.Offline
-    val body = multipartBody(fields, file)
+    // The server matches a retry by its body bytes; a random boundary would make every attempt
+    // a "different request". With a key the boundary comes from the key, so retries are identical.
+    val body = multipartBody(fields, file, idempotencyKey?.let { "own-audio-" + it.filter(Char::isLetterOrDigit).take(40) })
     val bytes = authorized(timeoutMs = 600_000) { token ->
-        base(url(path)).post(body).header("Authorization", "Bearer $token").build()
+        base(url(path)).post(body).header("Authorization", "Bearer $token")
+            .apply { idempotencyKey?.let { header("Idempotency-Key", it) } }
+            .build()
     }
     return decode(path, serializer, bytes)
 }
 
-internal fun multipartBody(fields: List<Pair<String, String>>, file: File): MultipartBody = MultipartBody.Builder()
+internal fun multipartBody(fields: List<Pair<String, String>>, file: File, boundary: String? = null): MultipartBody =
+    (if (boundary != null) MultipartBody.Builder(boundary) else MultipartBody.Builder())
     .setType(MultipartBody.FORM)
     .apply {
         fields.forEach { (name, value) -> addFormDataPart(name, value) }
