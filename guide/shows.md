@@ -43,7 +43,7 @@ The **More** menu (three dots) at the top has:
 | **Website** | The show's website, when the feed gives one. |
 | **Share Feed** | Shares the feed address through Android's share sheet. |
 | **Share with the Family** | own.audio, for a show you added: the rest of your family gets it too. |
-| **Unfollow** | Shows on this device or on an own.audio server. Asks first; the show's episodes, positions, downloads and Up Next entries are removed. On own.audio, a show the family shares leaves their library too. |
+| **Unfollow** | Shows on this device, and on own.audio a show you added (or, as the family's admin, a show the family shares). Asks first; the show's episodes, positions, downloads and Up Next entries are removed. On own.audio, a show the family shares leaves their library too. |
 
 Shows from an Audiobookshelf server can't be unfollowed from the app; manage them on the
 server, where removing a show removes it for everyone.
@@ -64,7 +64,7 @@ Under **Downloads**:
 | Setting | Choices | Default | What it does |
 |---|---|---|---|
 | **Download New Episodes** | **Off**, **Newest 1**, 3, 5, 10 | **Off** | Keeps the newest unplayed episodes downloaded, by themselves. Whether this waits for Wi-Fi is decided by **Download on Wi-Fi Only** in Settings. |
-| **Delete When Played** | on / off | off | A downloaded episode of this show is deleted once you have played it. |
+| **Delete When Played** | on / off | off | A downloaded episode of this show is deleted once you have played it and it has left the player. |
 | **Keep at Most** | **No Limit**, 1, 3, 5, 10 **Episodes** | **No Limit** | No more than this many of the show's episodes on the phone; the oldest go first. |
 
 The episode you are listening to is never deleted by these rules. Downloads that a rule starts

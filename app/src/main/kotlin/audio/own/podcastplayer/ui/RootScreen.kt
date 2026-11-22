@@ -33,6 +33,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -45,6 +47,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +76,9 @@ enum class Tab(@StringRes val title: Int, val icon: ImageVector) {
 @Composable
 fun TabsScreen(content: @Composable (Tab) -> Unit) {
     var selected by rememberSaveable { mutableStateOf(Tab.NEW_EPISODES) }
+    // Back on another tab goes to New Episodes, as Android's tabbed apps do (and book-android),
+    // rather than leaving the app; Back on New Episodes leaves it.
+    androidx.activity.compose.BackHandler(enabled = selected != Tab.NEW_EPISODES) { selected = Tab.NEW_EPISODES }
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             Tab.entries.forEach { tab ->
@@ -79,7 +86,7 @@ fun TabsScreen(content: @Composable (Tab) -> Unit) {
                     selected = tab == selected,
                     onClick = { selected = tab },
                     icon = { Icon(tab.icon, contentDescription = null) },
-                    label = { Text(stringResource(tab.title)) },
+                    label = { TabLabel(stringResource(tab.title)) },
                 )
             }
         },
@@ -101,4 +108,19 @@ fun Context.findActivity(): Activity? {
         context = context.baseContext
     }
     return null
+}
+
+/**
+ * A tab's name on one line: at large font sizes "Downloads" shrinks to fit its tab instead of
+ * breaking mid-word ("Downlo / ads"), as in book-android; "New Episodes" needs the lower floor.
+ */
+@Composable
+internal fun TabLabel(text: String) {
+    val size = LocalTextStyle.current.fontSize
+    Text(
+        text,
+        maxLines = 1,
+        autoSize = if (size.isSp) TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = size, stepSize = 0.5.sp) else null,
+        modifier = Modifier.testTag("tab.label"),
+    )
 }

@@ -74,7 +74,9 @@ class FeedParser(private val parsers: XmlParserFactory) {
         }
         if (reader.rejectedRoot) throw FeedException.NotAFeed()
         if (reader.kind == null) {
-            if (ok) throw FeedException.NotAFeed()
+            // Most web pages are HTML that no XML parser gets through (a lowercase doctype, bare
+            // attributes), so they fail before their root is seen; they are still not feeds.
+            if (ok || looksLikeHtml(bytes)) throw FeedException.NotAFeed()
             throw FeedException.Malformed(reason ?: "unreadable XML")
         }
         return Outcome(reader, ok, reason)
@@ -84,6 +86,11 @@ class FeedParser(private val parsers: XmlParserFactory) {
         private val xmlEntities = setOf("amp", "lt", "gt", "quot", "apos")
 
         private val bareAmpersand = Regex("&(?!(?:[A-Za-z][A-Za-z0-9]{1,8}|#[0-9]{1,7}|#x[0-9A-Fa-f]{1,6});)")
+
+        private val htmlStart = Regex("^\\s*(<\\?xml[^>]*>\\s*)?(<!--.*?-->\\s*)*<(!doctype\\s+html|html[\\s>])", RegexOption.IGNORE_CASE)
+
+        internal fun looksLikeHtml(bytes: ByteArray): Boolean =
+            htmlStart.containsMatchIn(bytes.copyOf(minOf(bytes.size, 2048)).decodeToString().removePrefix("\uFEFF"))
 
         internal fun escapeBareAmpersands(bytes: ByteArray): ByteArray? {
             val text = Mojibake.decodeUtf8Strictly(bytes) ?: return null

@@ -92,6 +92,9 @@ private class Stub(private val handler: (RecordedRequest) -> MockResponse) : Aut
         server.start()
     }
 
+    /** What this stub answers, for another stub built on it. */
+    fun answer(request: RecordedRequest): MockResponse = handler(request)
+
     val url: String get() = server.url("/").toString().trimEnd('/')
 
     fun count(method: String, path: String) = requests.count { it.method == method && it.url.encodedPath == path }
@@ -105,13 +108,15 @@ private fun json(text: String, code: Int = 200, type: String = "application/json
 private fun status(code: Int) = MockResponse.Builder().code(code).build()
 
 /** own.audio with one show p1 (owned by u1) of one episode, and a signed link that expires. */
-private fun ownAudio(visibility: String = "private") = Stub { request ->
+/** [elsewhere]: e1's progress as another device left it, `progress` records of the snapshot and the progress route. */
+private fun ownAudio(visibility: String = "private", elsewhere: String? = null) = Stub { request ->
     when (request.method to request.url.encodedPath) {
         "GET" to "/api/v2/sync/snapshot" -> json(
-            listOf(
+            listOfNotNull(
                 """{"type":"begin","cursor":"c0"}""",
                 """{"type":"record","kind":"podcast","id":"p1","record":{"id":"p1","title":"Server Show","feed_url":"https://pub.example/p1.xml","visibility":"$visibility","owner_id":"u1","created_at":"2026-10-01T00:00:00Z"}}""",
                 """{"type":"record","kind":"episode","id":"e1","record":{"id":"e1","podcast_id":"p1","guid":"e1","title":"One","published_at":"2026-10-01T08:00:00Z","audio_url":"https://pub.example/e1.mp3"}}""",
+                elsewhere?.let { """{"type":"record","kind":"progress.episode","id":"e1","record":$it}""" },
                 """{"type":"end","cursor":"c0"}""",
             ).joinToString("\n", postfix = "\n"),
             type = "application/x-ndjson",
@@ -121,7 +126,11 @@ private fun ownAudio(visibility: String = "private") = Stub { request ->
         "PUT" to "/api/v2/podcasts/p1/visibility" -> json(request.body?.utf8() ?: "{}")
         "PATCH" to "/api/v2/me/settings" -> json("""{"playback":{"speed":1.5}}""")
         "GET" to "/api/v2/me/podcasts/unplayed" -> json("""{"items":[]}""")
-        "PUT" to "/api/v2/me/progress/episode/e1" -> {
+        "GET" to "/api/v2/me/progress/episode/e1" -> elsewhere?.let { json(it) } ?: status(404)
+        "PUT" to "/api/v2/me/progress/episode/e1" -> if (elsewhere != null) {
+            // The newer position wins: an older report isn't applied.
+            json("""{"progress":$elsewhere,"applied":false}""")
+        } else {
             val position = Regex("\"position_ms\":(\\d+)").find(request.body?.utf8().orEmpty())?.groupValues?.get(1) ?: "0"
             val at = Regex("\"at\":\"([^\"]+)\"").find(request.body?.utf8().orEmpty())?.groupValues?.get(1) ?: "2026-11-21T10:00:00Z"
             json("""{"progress":{"kind":"episode","id":"e1","position_ms":$position,"finished":false,"updated_at":"$at"},"applied":true}""")
@@ -152,11 +161,14 @@ private fun shelf() = Stub { request ->
 /** A gPodder server keeping subscriptions per device: the uploads it got are kept. */
 private class GPodder : AutoCloseable {
     val uploads: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    /** Shows another device of the account follows. */
+    @Volatile var elsewhere: List<String> = emptyList()
     val stub = Stub { request ->
         val path = request.url.encodedPath
         when {
             path == "/api/2/subscriptions/alex.json" -> status(404)
-            path.startsWith("/api/2/subscriptions/alex/") && request.method == "GET" -> json("""{"add":[],"remove":[],"timestamp":10}""")
+            path.startsWith("/api/2/subscriptions/alex/") && request.method == "GET" ->
+                json("""{"add":[${elsewhere.joinToString(",") { "\"$it\"" }}],"remove":[],"timestamp":10}""")
             path.startsWith("/api/2/subscriptions/alex/") -> {
                 uploads += request.body?.utf8().orEmpty()
                 json("""{"timestamp":11,"update_urls":[]}""")
@@ -322,14 +334,16 @@ class ServerSourcesTest {
         onMain { model.load() }
         runBlocking { eventually { model.state.value.shows.isNotEmpty() } }
         val show = model.state.value.shows.first { it.source != SourceRef.Phone }
-        assertEquals(FamilySharing(canChange = true, shared = false), onMain { model.familySharing(show) })
+        assertEquals(FamilySharing(canChange = true, shared = false, canUnfollow = true), onMain { model.familySharing(show) })
         var held: Boolean? = null
         model.setSharedWithFamily(show, true) { held = it }
         runBlocking { eventually { held == true } }
         assertEquals("""{"visibility":"family"}""", server.requests.last { it.method == "PUT" }.body?.utf8())
 
         state.update { it.copy(servers = listOf(ownAudioRecord(server.url, userId = "u2"))) }
-        assertFalse("another member of the family can't", onMain { model.familySharing(show) }!!.canChange)
+        val other = onMain { model.familySharing(show) }!!
+        assertFalse("another member of the family can't", other.canChange)
+        assertFalse("nor unfollow it: the server would refuse", other.canUnfollow)
     }
 
     @Test
@@ -413,6 +427,48 @@ class ServerSourcesTest {
     }
 
     @Test
+    fun `an episode paused in the player asks before it jumps to where another device got to`() {
+        // The other device's position reaches the lists (live updates, refresh) before Play.
+        val server = ownAudio(elsewhere = """{"kind":"episode","id":"e1","position_ms":420000,"finished":false,"updated_at":"2026-11-21T11:00:00Z"}""").kept()
+        val engine = FakeEngine()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url)))), engine)
+        onMain { model.load() }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Server Show" } } }
+        val item = SourcedEpisode(SourceRef.Server(UUID.fromString(oaId)), audio.own.podcast.library.Episode(id = "e1", showId = "p1", title = "One"))
+        onMain { model.play(item, startAt = 0) }
+        engine.report(PodcastPlayer.Reason.PAUSE, 148_000, time)
+        engine.pause()
+        runBlocking { eventually { server.count("PUT", "/api/v2/me/progress/episode/e1") == 1 } }
+        onMain { model.reloadLists() }
+        runBlocking { eventually { model.state.value.progress[item.id]?.positionMs == 420_000L } }
+        val loads = engine.loads.size
+
+        onMain { model.play(item) }
+        assertEquals(PendingResume(item, localMs = 148_000, otherMs = 420_000), model.state.value.pendingResume)
+        assertEquals("nothing moved before the answer", loads, engine.loads.size)
+        onMain { model.resolveResume(useOther = false) }
+        runBlocking { eventually { engine.loads.size == loads + 1 } }
+        assertEquals(148_000L, engine.loads.last().startMs)
+    }
+
+    @Test
+    fun `a waiting position for an episode the server no longer has is dropped, not holding back the others`() {
+        // An own.audio show unfollowed while one of its positions waited: the server answers 404.
+        val server = ownAudio().kept()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url)))))
+        onMain { model.load() }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Server Show" } } }
+        val pending = PendingProgress(RoomValueStore(db, "pending", ListSerializer(PendingProgress.Entry.serializer())))
+        runBlocking {
+            pending.record(PendingProgress.Entry("$oaId/p9|e9", audio.own.podcast.library.ListeningProgress(5_000, false, time)))
+            pending.record(PendingProgress.Entry("$oaId/p1|e1", audio.own.podcast.library.ListeningProgress(60_000, false, time.plusSeconds(5))))
+        }
+        onMain { model.sendPendingProgress() }
+        assertEquals("the later position still reaches the server", 1, server.count("PUT", "/api/v2/me/progress/episode/e1"))
+        assertTrue("and nothing is left to send again", runBlocking { pending.all() }.isEmpty())
+    }
+
+    @Test
     fun `a removed server's downloads leave with it`() {
         val server = ownAudio().kept()
         val state = MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url))))
@@ -436,6 +492,18 @@ class ServerSourcesTest {
         assertTrue("the account now names the device's show", model.state.value.accountFeeds[gpId].orEmpty().contains(FEED))
         model.setActiveSource(gpId)
         assertEquals("its switch entry is the device's shows on the account", listOf("Feed Show"), model.state.value.visibleShows.map { it.show.title })
+    }
+
+    @Test
+    fun `a show another device followed arrives in the lists with Sync Now`() {
+        val gpodder = GPodder().kept()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(gpodderRecord(gpodder.stub.url)))))
+        onMain { model.load() }
+        runBlocking { eventually { synced.size >= 1 } }
+        assertTrue(model.state.value.shows.isEmpty())
+        gpodder.elsewhere = listOf("https://elsewhere.example/feed.xml")
+        onMain { model.syncNow(gpId) }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Feed Show" } } }
     }
 
     @Test
@@ -515,6 +583,31 @@ class ServerSourcesTest {
         state.update { it.copy(modules = mapOf(oaId to setOf("podcast_discovery"))) }
         runBlocking { eventually { model.episodeAI(SourcedEpisode(ref, episode.copy(transcripts = transcript))) == null } }
         assertTrue("reading whether it is offered asks the server nothing", server.requests.none { it.url.encodedPath.startsWith("/api/v2/summaries") })
+    }
+
+    @Test
+    fun `the modules that arrive while the lists first load are kept - Discover's catalogue and summaries`() {
+        // At launch the source is made before the address race; the race brings the server's
+        // modules while the first snapshot is still loading.
+        val snapshotAsked = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val plain = ownAudio()
+        val server = Stub { request ->
+            if (request.url.encodedPath == "/api/v2/sync/snapshot") {
+                snapshotAsked.countDown()
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            plain.answer(request)
+        }.kept()
+        plain.close()
+        val state = MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url))))
+        val model = model(state)
+        val loading = Thread { onMain { model.load() } }.apply { start() }
+        assertTrue(snapshotAsked.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        state.update { it.copy(modules = mapOf(oaId to setOf("podcast_discovery", "podcast_search", "summaries"))) }
+        release.countDown()
+        loading.join(10_000)
+        runBlocking { eventually { model.state.value.catalogueServer == "Home" } }
     }
 
     // region Misuse (MisuseTests.swift in spirit; the feed cases are in MisuseTest)

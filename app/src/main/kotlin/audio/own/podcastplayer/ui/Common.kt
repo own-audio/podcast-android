@@ -222,3 +222,23 @@ fun Section(header: String?, modifier: Modifier = Modifier, footer: String? = nu
 
 /** TalkBack's headings: a page's title and its sections', to jump between with the heading gesture. */
 fun Modifier.asHeading(): Modifier = semantics { heading() }
+
+/**
+ * Runs [action] once for each swipe of a row that settles open, then closes the row again. Not
+ * through the box's `onDismiss`: with an action that changes the row itself (Played ↔ Unplayed)
+ * and a row that stays in its list, that was called again and again while the row stayed open,
+ * toggling the episode and writing to its server each time.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeActions(state: androidx.compose.material3.SwipeToDismissBoxState, action: (androidx.compose.material3.SwipeToDismissBoxValue) -> Unit) {
+    val current = androidx.compose.runtime.rememberUpdatedState(action)
+    androidx.compose.runtime.LaunchedEffect(state) {
+        androidx.compose.runtime.snapshotFlow { state.settledValue }.collect { value ->
+            if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled) {
+                current.value(value)
+                state.reset()
+            }
+        }
+    }
+}

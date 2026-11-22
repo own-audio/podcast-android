@@ -25,6 +25,7 @@ import audio.own.kit.ownaudio.directorySearch
 import audio.own.kit.ownaudio.directorySimilar
 import audio.own.kit.ownaudio.events
 import audio.own.kit.ownaudio.follow
+import audio.own.kit.ownaudio.me
 import audio.own.kit.ownaudio.httpStatus
 import audio.own.kit.ownaudio.pageAll
 import audio.own.kit.ownaudio.playbackInfo
@@ -398,6 +399,22 @@ class OwnAudioPodcastSource(
 
     /** The account that follows the show for the household: only it may share it or keep it private. */
     suspend fun owner(showId: String): String? = catalogue().podcasts[showId]?.ownerId?.ifEmpty { null }
+
+    /** The account's role in its household (`admin` or `member`), asked once. */
+    @Volatile private var familyRole: String? = null
+
+    /**
+     * Whether the server lets this account ([me]) unfollow the show: its owner may, and a
+     * household admin may for a show shared with the household. Anyone else is refused, so the
+     * app doesn't offer it.
+     */
+    suspend fun mayUnfollow(showId: String, me: String?): Boolean {
+        val podcast = catalogue().podcasts[showId] ?: return false
+        if (me != null && podcast.ownerId == me) return true
+        if (podcast.visibility != "family") return false
+        val role = familyRole ?: runCatching { translating { client.me() }.family.role }.getOrNull()?.also { familyRole = it }
+        return role == "admin"
+    }
 
     /** How many episodes of each show the listener hasn't finished, for the Shows grid. */
     suspend fun unplayedCounts(): Map<String, Long> =

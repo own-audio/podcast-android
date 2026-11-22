@@ -22,7 +22,7 @@ To add one, see [Getting started](getting-started.md#add-a-server).
 |---|---|---|---|---|
 | Where the shows come from | Feeds you follow | The shows your family follows on the server | The server's podcast libraries | The shows on this phone, kept in step with the account |
 | Follow a new show from the app | Yes | Yes | Yes, if your account may upload | Yes: follow it on this phone, and the account gets it |
-| Unfollow from the app | Yes | Yes | No | Yes, on this phone |
+| Unfollow from the app | Yes | Shows you added; the family's admin also shared ones | No | Yes, on this phone |
 | Positions and played marks on other devices | No, they stay on this phone | Yes | Yes, for the episodes the server holds | Yes |
 | Episodes kept on the server | No | Yes | Yes | No |
 | Family, devices, listening time | | Yes, see [own.audio extras](own-audio.md) | | |

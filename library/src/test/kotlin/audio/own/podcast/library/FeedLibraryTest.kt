@@ -139,6 +139,13 @@ class FeedLibraryTest {
     }
 
     @Test
+    fun `an address that answers with something unreadable is not a feed, not an unreachable server`() = runTest {
+        val library = FeedLibrary(InMemoryFeedLibraryStore(), { _, _ -> throw audio.own.kit.feed.FeedException.Malformed("junk") })
+        val error = runCatching { library.follow("https://example.com/") }.exceptionOrNull()
+        assertTrue(error is SourceException.NotAFeed)
+    }
+
+    @Test
     fun `a serial show lists oldest first and brings nothing old into the inbox`() = runTest {
         val world = World()
         world.set(FEED_URL, feed(serial = true, items = listOf(Item("e1", 1), Item("e2", 2))))

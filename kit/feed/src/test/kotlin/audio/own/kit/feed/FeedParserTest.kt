@@ -114,6 +114,14 @@ class FeedParserTest {
     }
 
     @Test
+    fun `a website that is not well-formed XML is not a feed either`() {
+        // example.com's page, as most sites write HTML today: a lowercase doctype and bare attributes.
+        val page = "﻿\n  <!doctype html><html lang=en><head><meta charset=utf-8><title>Example</title></head><body><p>Hi</body></html>"
+        assertThrows(FeedException.NotAFeed::class.java) { testParser.parse(page.encodeToByteArray()) }
+        assertThrows(FeedException.NotAFeed::class.java) { testParser.parse("<HTML><BODY>Moved<BR></BODY></HTML>".encodeToByteArray()) }
+    }
+
+    @Test
     fun `a feed that breaks off after some episodes keeps them`() {
         val broken = """
             <?xml version="1.0"?><rss version="2.0"><channel><title>Cut</title>

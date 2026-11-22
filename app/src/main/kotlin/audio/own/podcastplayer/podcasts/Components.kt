@@ -17,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.RemoveCircleOutline
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
@@ -166,7 +164,6 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
     val palette = LocalPalette.current
     val played = ui.progress?.played == true
     val swipe = rememberSwipeToDismissBoxState()
-    val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val playedLabel = stringResource(if (played) R.string.mark_unplayed else R.string.mark_played)
@@ -178,18 +175,17 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
     val removeDownloadLabel = stringResource(SR.string.remove_download)
     val cancelDownloadLabel = stringResource(R.string.cancel_download)
     val retryDownloadLabel = stringResource(R.string.try_download_again)
+    audio.own.podcastplayer.ui.SwipeActions(swipe) { value ->
+        when (value) {
+            SwipeToDismissBoxValue.StartToEnd -> actions.markPlayed(ui.item, !played)
+            SwipeToDismissBoxValue.EndToStart -> actions.dismiss(ui.item)
+            SwipeToDismissBoxValue.Settled -> Unit
+        }
+    }
     SwipeToDismissBox(
         state = swipe,
         modifier = modifier,
         enableDismissFromEndToStart = inInbox,
-        onDismiss = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> actions.markPlayed(ui.item, !played)
-                SwipeToDismissBoxValue.EndToStart -> actions.dismiss(ui.item)
-                SwipeToDismissBoxValue.Settled -> Unit
-            }
-            scope.launch { swipe.reset() }
-        },
         backgroundContent = {
             val direction = swipe.dismissDirection
             val (color, icon, label) = when (direction) {

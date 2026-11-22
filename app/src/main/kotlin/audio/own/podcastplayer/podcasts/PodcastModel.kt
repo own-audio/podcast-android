@@ -17,6 +17,7 @@ import audio.own.kit.ownaudio.updateSettings as updateAccountSettings
 import audio.own.player.core.SkipIntervals
 import audio.own.player.spoken.SmartRewind
 import audio.own.podcast.library.AudiobookshelfPodcastSource
+import audio.own.podcast.library.EpisodeKey
 import audio.own.podcast.library.FeedLoader
 import audio.own.podcast.library.GPodderSync
 import audio.own.podcast.library.GPodderSyncState
@@ -89,6 +90,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -111,7 +113,7 @@ data class Suggestion(val show: ShowSearchResult, val because: String)
 enum class OfflineReason { CHOSEN, NO_NETWORK }
 
 /** Whether a show of own.audio may be shared with the family here (only by its owner), and whether it is. */
-data class FamilySharing(val canChange: Boolean, val shared: Boolean)
+data class FamilySharing(val canChange: Boolean, val shared: Boolean, val canUnfollow: Boolean = canChange)
 
 /**
  * The servers' clients and the few things the model tells the servers model, for the kinds
@@ -305,13 +307,17 @@ class PodcastModel(
         scope.launch { preferences.playback.drop(1).collect { applySettings(it) } }
         scope.launch { network.map { it.dataSaver }.distinctUntilChanged().drop(1).collect { applySettings(settings) } }
         servers.first { it.loaded }
-        rebuildSources(servers.value)
+        val first = servers.value
+        rebuildSources(first)
+        // Followed from here, not after the lists below: the address race brings each server's
+        // modules (its directory, summaries) while they load, and a change that landed before
+        // the subscription would be skipped as the flow's current value.
+        scope.launch { servers.dropWhile { it == first }.collect { rebuildSources(it) } }
         reloadLists()
         _state.update { it.copy(loaded = true) }
         // A source remembered from before that is gone now would filter everything away.
         if (active != null && _state.value.sources.none { it.ref.id == active }) setActiveSource(null)
         restoreLastPlayed()
-        scope.launch { servers.drop(1).collect { rebuildSources(it) } }
         // Without a network the player waits, and goes on by itself when it is back.
         scope.launch { network.map { it.connected }.distinctUntilChanged().collect { player.networkChanged(it) } }
         scope.launch {
@@ -683,6 +689,7 @@ class PodcastModel(
         val current = player.state.value.item
         if (current?.source == show.source && current.episode.showId == show.show.id) stopPlayback()
         upNext.removeAll { it.source == show.source.id && it.episode.showId == show.show.id }
+        pending.removeAll(SourcedEpisode.id(show.source, EpisodeKey(show.show.id, "")))
         downloads.remove(downloads.state.value.entries.values.filter { it.record.source == show.source.id && it.record.episode.showId == show.show.id }.map { it.id })
         if (show.source == SourceRef.Phone) scheduleSync()
         _state.update { state ->
@@ -711,13 +718,18 @@ class PodcastModel(
 
     /**
      * Whether the show is shared with the family, and whether this account may change that: only
-     * the account that follows it for the household (the record's owner) can. Null outside own.audio.
+     * the account that follows it for the household (the record's owner) can. Unfollowing is the
+     * owner's too, or a household admin's for a shared show. Null outside own.audio.
      */
     suspend fun familySharing(show: SourcedShow): FamilySharing? {
         val source = ownAudioSource(show.source) ?: return null
         val me = show.source.serverId?.let { servers.value.server(it.toString())?.userId }
         val owner = source.owner(show.show.id)
-        return FamilySharing(canChange = me != null && owner == me, shared = source.isSharedWithFamily(show.show.id))
+        return FamilySharing(
+            canChange = me != null && owner == me,
+            shared = source.isSharedWithFamily(show.show.id),
+            canUnfollow = source.mayUnfollow(show.show.id, me),
+        )
     }
 
     /** Shares the show with the family, or keeps it to its owner; [after] gets what the server holds. */
@@ -790,10 +802,15 @@ class PodcastModel(
             } else {
                 withTimeoutOrNull(REMOTE_POSITION_TIMEOUT_MS) { runCatching { source.progress(item.episode.key) }.getOrNull() }
             }
-            if (!automatic && local != null && remote != null && !local.played && !remote.played &&
-                kotlin.math.abs(local.positionMs - remote.positionMs) > RESUME_QUESTION_MS && local.positionMs > 0
+            // This device's place: the paused player's, if it holds the episode. Live updates
+            // write another device's newer position into the list's progress as it arrives, so
+            // that one may already be the other device's.
+            val held = player.state.value.takeIf { it.item?.id == item.id && !it.isPlaying }?.positionMs?.takeIf { it > 0 }
+            val here = held ?: local?.takeIf { !it.played }?.positionMs
+            if (!automatic && here != null && remote != null && !remote.played &&
+                kotlin.math.abs(here - remote.positionMs) > RESUME_QUESTION_MS && here > 0
             ) {
-                _state.update { it.copy(pendingResume = PendingResume(item, local.positionMs, remote.positionMs)) }
+                _state.update { it.copy(pendingResume = PendingResume(item, here, remote.positionMs)) }
                 return
             }
             val newest = listOfNotNull(local, remote).maxByOrNull { it.updatedAt }
@@ -976,6 +993,11 @@ class PodcastModel(
                 pending.sent(entry)
             } catch (error: CancellationException) {
                 throw error
+            } catch (_: SourceException.NotFound) {
+                // The server no longer has the episode (its show was unfollowed or deleted):
+                // nothing can hold this position, and keeping it would hold back the server's
+                // other positions behind it at every refresh.
+                pending.sent(entry)
             } catch (_: Exception) {
                 failing += ref.id
             }

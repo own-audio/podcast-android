@@ -89,6 +89,9 @@ class FeedLibrary(
             throw error
         } catch (_: FeedException.NotAFeed) {
             throw SourceException.NotAFeed()
+        } catch (_: FeedException.Malformed) {
+            // Something answered, so the address is reachable; what it sent can't be read as a feed.
+            throw SourceException.NotAFeed()
         } catch (error: Exception) {
             throw SourceException.Network(error)
         }

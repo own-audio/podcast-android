@@ -157,7 +157,10 @@ fun SkipIcon(back: Boolean, seconds: Int, size: androidx.compose.ui.unit.Dp, tin
             Text(
                 "$seconds",
                 color = tint,
-                fontSize = (size.value * 0.26f).sp,
+                // Part of the picture: it keeps the icon's size whatever the font scale, or at
+                // 200 % the number covers the arrow.
+                fontSize = with(LocalDensity.current) { (size * 0.26f).toSp() },
+                lineHeight = with(LocalDensity.current) { (size * 0.3f).toSp() },
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = size * 0.12f),
             )
@@ -532,12 +535,16 @@ fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boo
             if (entries.isNotEmpty()) TextButton(onClick = actions::clearQueue) { Text(stringResource(R.string.clear_up_next), color = palette.error) }
         }
         if (entries.isEmpty()) {
-            audio.own.core.designsystem.components.EmptyState(
-                icon = Icons.AutoMirrored.Filled.PlaylistPlay,
-                title = stringResource(R.string.nothing_up_next),
-                text = stringResource(R.string.nothing_up_next_text),
-                modifier = Modifier.fillMaxWidth().padding(vertical = Tokens.Spacing.xl),
-            )
+            // The empty state fills the height it is given, and a sheet offers the whole screen's:
+            // without a scroll container it centred itself below the visible half of the sheet.
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                audio.own.core.designsystem.components.EmptyState(
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    title = stringResource(R.string.nothing_up_next),
+                    text = stringResource(R.string.nothing_up_next_text),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         } else {
             LazyColumn {
                 itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->

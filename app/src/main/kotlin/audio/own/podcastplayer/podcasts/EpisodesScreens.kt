@@ -158,6 +158,17 @@ fun SourceMenu(sources: List<SourceInfo>, active: String?, onSelect: (String?) -
     }
 }
 
+/**
+ * The chapters an episode's page lists. Most feeds link a chapters document rather than list
+ * chapters inline, and that document (or the marks in the file) is read only when the episode
+ * plays; for the episode in the player, its chapters are the ones the player found.
+ */
+internal fun shownChapters(item: SourcedEpisode, player: audio.own.podcastplayer.playback.PodcastPlayer.State): List<Chapter> {
+    val own = item.episode.chapters
+    if (own.isNotEmpty() || player.item?.id != item.id) return own
+    return player.chapters.map { Chapter(startMs = it.startMs, endMs = it.endMs, title = it.title) }
+}
+
 /** One episode: what it is, Play or Resume, Played, Up Next, its chapters and its notes with their links. */
 @Composable
 fun EpisodeContent(

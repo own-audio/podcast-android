@@ -36,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -137,7 +136,11 @@ fun SettingsContent(
         Section(header = stringResource(R.string.servers), footer = stringResource(AppR.string.servers_footer)) {
             // own.audio first, as the source switch lists them.
             ui.servers.sortedBy { if (it.kind == ServerKinds.OWN_AUDIO) 0 else 1 }.forEach { server ->
-                ServerRow(server, ui.connections[server.id], ui.icons[server.id], onOpen = { onOpenServer(server.id) }, onRemove = { removing = server })
+                // Keyed by server: a row's swipe state must not pass to the server that moves up
+                // into its place when one above is removed.
+                androidx.compose.runtime.key(server.id) {
+                    ServerRow(server, ui.connections[server.id], ui.icons[server.id], onOpen = { onOpenServer(server.id) }, onRemove = { removing = server })
+                }
                 RowDivider(start = 64.dp)
             }
             ButtonRow(stringResource(R.string.add_a_server), onClick = onAddServer, icon = Icons.Filled.Add, color = MaterialTheme.colorScheme.primary)
@@ -232,12 +235,7 @@ private fun StreamingSection(settings: PlaybackSettings, onChange: (PlaybackSett
 private fun ServerRow(server: ServerRecord, connection: ConnectionState?, icon: File?, onOpen: () -> Unit, onRemove: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val swipe = rememberSwipeToDismissBoxState()
-    LaunchedEffect(swipe.currentValue) {
-        if (swipe.currentValue == SwipeToDismissBoxValue.EndToStart) {
-            onRemove()
-            swipe.reset()
-        }
-    }
+    audio.own.podcastplayer.ui.SwipeActions(swipe) { if (it == SwipeToDismissBoxValue.EndToStart) onRemove() }
     val palette = LocalPalette.current
     SwipeToDismissBox(
         state = swipe,

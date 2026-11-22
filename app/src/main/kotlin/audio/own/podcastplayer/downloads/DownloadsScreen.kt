@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +66,6 @@ import audio.own.podcastplayer.ui.Page
 import audio.own.podcastplayer.ui.RowDivider
 import audio.own.podcastplayer.ui.Section
 import audio.own.podcastplayer.ui.TabBar
-import kotlinx.coroutines.launch
 import audio.own.core.strings.R as SR
 
 /** One source's downloads; [name] null while everything comes from one source. */
@@ -183,18 +181,16 @@ private fun DownloadRow(entry: EpisodeDownload, state: PodcastState, player: Pod
     val palette = LocalPalette.current
     val context = LocalContext.current
     val swipe = rememberSwipeToDismissBoxState()
-    val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     val removeLabel = stringResource(SR.string.remove)
     // A download plays whatever the network does.
     val row = state.rowUi(item, player, canPlay = entry.isDone || !state.isOffline)
+    audio.own.podcastplayer.ui.SwipeActions(swipe) { value ->
+        if (value == SwipeToDismissBoxValue.EndToStart) actions.removeDownload(item)
+    }
     SwipeToDismissBox(
         state = swipe,
         enableDismissFromStartToEnd = false,
-        onDismiss = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) actions.removeDownload(item)
-            scope.launch { swipe.reset() }
-        },
         backgroundContent = {
             Row(
                 Modifier.fillMaxSize().background(palette.error).padding(horizontal = Tokens.Spacing.xl),

@@ -391,6 +391,27 @@ class OwnAudioPodcastSourceTest {
     }
 
     @Test
+    fun `unfollowing is offered to the show's owner, and to a household admin for a shared show only`() = runBlocking {
+        var role = "member"
+        val server = server().podcast("p1").podcast("p2", visibility = "family")
+        server.routes = { request ->
+            when (request.method to request.url.encodedPath) {
+                "GET" to "/api/v2/me" -> json("""{"id":"u2","email":"m@example.com","display_name":"M","family":{"id":"f1","role":"$role"}}""")
+                else -> null
+            }
+        }
+        val member = source(server)
+        member.shows()
+        assertTrue("the owner", member.mayUnfollow("p1", "u1"))
+        assertFalse("a member, a private show", member.mayUnfollow("p1", "u2"))
+        assertFalse("a member, a shared show: the server refuses", member.mayUnfollow("p2", "u2"))
+        role = "admin"
+        val admin = source(server)
+        assertTrue("an admin, a shared show", admin.mayUnfollow("p2", "u2"))
+        assertFalse("an admin, someone's private show", admin.mayUnfollow("p1", "u2"))
+    }
+
+    @Test
     fun `sharing with the family, and the unplayed counts`() = runBlocking {
         val server = library()
         server.routes = { request ->

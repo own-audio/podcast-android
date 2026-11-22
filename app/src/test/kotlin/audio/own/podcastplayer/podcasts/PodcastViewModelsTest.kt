@@ -73,6 +73,19 @@ class PodcastViewModelsTest {
         assertEquals("nothing was asked for a bad address", 2, asked.size)
     }
 
+    @Test
+    fun `a show followed from a search result and unfollowed on its page can be followed again`() = runBlocking {
+        val vm = AddShowViewModel("https://example.com/rss", listOf(SourceInfo(SourceRef.Phone, "This Device", null)), active = null) { url, ref -> followed(url, ref) }
+        vm.submit()
+        eventually { vm.state.value.followed != null }
+        val show = vm.state.value.followed!!
+        vm.showsChanged(emptyList())
+        assertEquals("not listed yet (a server may take a moment): still following", show, vm.state.value.followed)
+        vm.showsChanged(listOf(show))
+        vm.showsChanged(emptyList())
+        assertNull("unfollowed since: Follow again, not a page of a show that is gone", vm.state.value.followed)
+    }
+
     private class Catalogue(private val results: List<ShowSearchResult>, var fail: Boolean = false) : ShowCatalogue {
         val searches = mutableListOf<String>()
         val pages = mutableListOf<String?>()

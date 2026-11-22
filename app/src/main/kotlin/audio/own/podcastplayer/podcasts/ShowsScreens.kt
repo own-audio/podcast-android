@@ -534,6 +534,24 @@ class AddShowViewModel(
 
     fun setTarget(ref: SourceRef) = _state.update { it.copy(target = ref) }
 
+    private var followedListed = false
+
+    /**
+     * The shows followed now. The page keeps saying "Following" for the show it followed only
+     * while that show is followed: once it has been in the lists and leaves them (unfollowed on
+     * its page), Follow is offered again rather than a page of a show that is gone.
+     */
+    fun showsChanged(shows: List<SourcedShow>) {
+        val followed = _state.value.followed ?: return
+        val listed = shows.any { it.id == followed.id }
+        if (listed) {
+            followedListed = true
+        } else if (followedListed) {
+            followedListed = false
+            _state.update { it.copy(followed = null) }
+        }
+    }
+
     fun submit() {
         val held = _state.value
         if (held.working) return

@@ -40,6 +40,7 @@ import audio.own.podcastplayer.playback.OutputSwitcher
 import audio.own.podcastplayer.podcasts.AddShowContent
 import audio.own.podcastplayer.podcasts.AddShowViewModel
 import audio.own.podcastplayer.podcasts.CategoryContent
+import audio.own.podcastplayer.podcasts.shownChapters
 import audio.own.podcastplayer.podcasts.CategoryViewModel
 import audio.own.podcastplayer.podcasts.DiscoverContent
 import audio.own.podcastplayer.podcasts.DiscoverViewModel
@@ -315,7 +316,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
             page = page,
             row = { state.rowUi(it, player, model.canPlay(it)) },
             actions = actions,
-            menu = ShowMenu(show.show.link, show.show.feedUrl, Capability.UNFOLLOW in model.capabilities(show.source)),
+            menu = ShowMenu(show.show.link, show.show.feedUrl, Capability.UNFOLLOW in model.capabilities(show.source) && sharing?.canUnfollow != false),
             similar = similar,
             sharedWithFamily = sharing?.shared == true,
             canShareWithFamily = sharing?.canChange == true,
@@ -366,7 +367,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         EpisodeContent(
             ui = ui,
             sourceName = state.sourceName(item.source),
-            chapters = item.episode.chapters,
+            chapters = shownChapters(item, player),
             actions = actions,
             onPlayFrom = { start ->
                 if (player.item?.id == item.id) {
@@ -426,6 +427,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         val actions = rememberModelActions(container, nav)
         val vm = viewModel(key = "result-$resultId") { AddShowViewModel(result.feedUrl, state.followTargets, state.activeSource) { url, target -> model.follow(url, target) } }
         val follow by vm.state.collectAsStateWithLifecycle()
+        LaunchedEffect(state.shows, follow.followed) { vm.showsChanged(state.shows) }
         val existing = state.shows.firstOrNull { it.show.feedUrl == result.feedUrl }
             ?: result.podcastId?.let { podcast -> state.shows.firstOrNull { it.show.id == podcast } }
         val similar by produceState<List<ShowSearchResult>?>(null, result.feedUrl) { value = model.similarShows(result.feedUrl) }
