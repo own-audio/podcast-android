@@ -4,7 +4,9 @@ import java.io.IOException
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonElement
@@ -174,9 +176,11 @@ class OwnAudioClient(
 
     // region Transport
 
-    internal suspend fun execute(request: Request, timeoutMs: Long = requestTimeoutMs): ByteArray {
+    // The body is read after the call resumes, on the caller's thread: screens call from the main
+    // thread, where reading a large answer throws NetworkOnMainThreadException.
+    internal suspend fun execute(request: Request, timeoutMs: Long = requestTimeoutMs): ByteArray = withContext(Dispatchers.IO) {
         val response = http.newCall(request).also { it.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS) }.await()
-        return response.use {
+        response.use {
             val bytes = try {
                 it.body.bytes()
             } catch (e: IOException) {
