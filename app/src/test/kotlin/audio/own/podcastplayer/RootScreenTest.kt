@@ -13,7 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import audio.own.podcast.library.SourceRef
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.podcasts.EpisodeActions
 import audio.own.podcastplayer.podcasts.NewEpisodesContent
 import audio.own.podcastplayer.podcasts.OfflineReason
@@ -44,7 +44,7 @@ class RootScreenTest {
             if (tab == Tab.NEW_EPISODES) {
                 NewEpisodesContent(
                     state = state,
-                    player = EpisodePlayer.State(),
+                    player = PodcastPlayer.State(),
                     actions = EpisodeActions.None,
                     canPlay = { true },
                     offlineMode = offlineMode,

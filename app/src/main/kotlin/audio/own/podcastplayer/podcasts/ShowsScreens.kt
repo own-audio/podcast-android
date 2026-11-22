@@ -53,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -75,7 +76,7 @@ import audio.own.podcastplayer.R
 import audio.own.podcastplayer.app.UiText
 import audio.own.podcastplayer.app.text
 import audio.own.podcastplayer.onboarding.FormTextField
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.ui.BarAction
 import audio.own.podcastplayer.ui.ErrorLine
 import audio.own.podcastplayer.ui.Page
@@ -219,7 +220,7 @@ private fun ShowTile(show: SourcedShow, onOpen: (SourcedShow) -> Unit) {
 
 // region One show
 
-enum class EpisodeFilter(val label: Int) { ALL(R.string.filter_all), UNPLAYED(R.string.unplayed) }
+enum class EpisodeFilter(val label: Int) { ALL(R.string.filter_all), UNPLAYED(R.string.unplayed), DOWNLOADED(SR.string.downloaded) }
 
 /** A show's episodes, loaded from its source; refreshed on a pull. */
 class ShowViewModel(
@@ -363,7 +364,11 @@ fun ShowContent(
                                 }
                             }
                         }
-                        val shown = if (filter == EpisodeFilter.UNPLAYED) episodes.filter { row(it).progress?.played != true } else episodes
+                        val shown = when (filter) {
+                            EpisodeFilter.ALL -> episodes
+                            EpisodeFilter.UNPLAYED -> episodes.filter { row(it).progress?.played != true }
+                            EpisodeFilter.DOWNLOADED -> episodes.filter { row(it).download != null }
+                        }
                         items(shown, key = { it.id }) { item -> EpisodeRow(row(item), actions, showsShowTitle = false) }
                     }
                     page.failed -> item("failed") {
@@ -415,7 +420,7 @@ private val SPEED_CHOICES: List<Float?> = listOf(null, 0.75f, 1.0f, 1.25f, 1.5f,
 
 /**
  * What the listener chose for one show: New Episodes, Up Next, a start offset, a speed of its
- * own. Kept on this device for every source. The download rules come with downloads (P8).
+ * own, and its download rules. Kept on this device for every source.
  */
 @Composable
 fun ShowSettingsContent(initial: ShowSettings, onCancel: () -> Unit, onDone: (ShowSettings) -> Unit) {
@@ -444,6 +449,22 @@ fun ShowSettingsContent(initial: ShowSettings, onCancel: () -> Unit, onDone: (Sh
                 label = { speed -> speed?.let { audio.own.player.spoken.SpeedText.text(it) } ?: stringResource(R.string.as_in_settings) },
             ) { settings = settings.copy(speed = it) }
         }
+        Section(header = stringResource(R.string.tab_downloads), footer = stringResource(R.string.show_downloads_footer)) {
+            ChoiceLine(
+                stringResource(R.string.download_new_episodes),
+                ShowSettings.AUTO_DOWNLOAD_CHOICES,
+                settings.autoDownload,
+                label = { count -> if (count == 0) stringResource(R.string.off) else stringResource(R.string.newest_n, count) },
+            ) { settings = settings.copy(autoDownload = it) }
+            SwitchLine(stringResource(R.string.delete_when_played), settings.deleteWhenPlayed) { settings = settings.copy(deleteWhenPlayed = it) }
+            ChoiceLine(
+                stringResource(R.string.keep_at_most),
+                ShowSettings.KEEP_AT_MOST_CHOICES,
+                settings.keepAtMost,
+                label = { limit -> if (limit == null) stringResource(R.string.no_limit) else pluralStringResource(R.plurals.episodes_count_title, limit, limit) },
+            ) { settings = settings.copy(keepAtMost = it) }
+        }
+
     }
 }
 
@@ -587,5 +608,5 @@ fun TargetPicker(targets: List<SourceInfo>, chosen: SourceRef, onTarget: (Source
 
 /** A thin wrapper so the screens and their tests take the same lambdas. */
 @Composable
-fun rememberRow(state: PodcastState, player: EpisodePlayer.State, canPlay: (SourcedEpisode) -> Boolean): (SourcedEpisode) -> EpisodeRowUi =
+fun rememberRow(state: PodcastState, player: PodcastPlayer.State, canPlay: (SourcedEpisode) -> Boolean): (SourcedEpisode) -> EpisodeRowUi =
     remember(state, player) { { item: SourcedEpisode -> state.rowUi(item, player, canPlay(item)) } }

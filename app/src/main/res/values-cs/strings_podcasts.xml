@@ -137,7 +137,6 @@
         <item quantity="other">%d epizod</item>
     </plurals>
     <!-- Settings (P9) -->
-    <string name="downloads_offline_footer">Režim offline zobrazí a přehraje jen to, co je v tomto zařízení, stejně jako aplikace sama bez sítě.</string>
     <string name="playback">Přehrávání</string>
     <string name="skip_back">Přeskočit zpět</string>
     <string name="skip_forward">Přeskočit vpřed</string>
@@ -161,4 +160,44 @@
     <string name="last_synced">Naposledy synchronizováno</string>
     <string name="sync_footer">Pořady a pozice v tomto zařízení se udržují ve shodě s účtem, stejně jako v každé další aplikaci, která je k němu přihlášená.</string>
     <string name="share_with_the_family">Sdílet s rodinou</string>
+    <!-- P8: stažené -->
+    <string name="downloading_title">Stahuje se %1$s</string>
+    <string name="downloading_episodes">Stahují se epizody</string>
+    <string name="download_wifi_only">Stahovat jen přes Wi-Fi</string>
+    <string name="keep_at_most">Ponechat nejvýše</string>
+    <string name="no_limit">Bez omezení</string>
+    <string name="gb_count">%d GB</string>
+    <string name="downloads_settings_footer">Režim offline zobrazí a přehraje jen to, co je v tomto zařízení, stejně jako aplikace sama bez sítě. Nad limitem odcházejí nejdřív přehrané epizody, pak ty nejdéle nepřehrávané; nikdy ta, která hraje. Pořad může mít vlastní pravidla stahování v nastavení pořadu.</string>
+    <string name="nothing_downloaded">Nic staženo</string>
+    <string name="nothing_downloaded_text">Zde se objeví stažené epizody, u každé zdroj, odkud pochází. Hrají i bez sítě.</string>
+    <string name="downloading">Stahuje se</string>
+    <plurals name="retry_failed">
+        <item quantity="one">Zkusit znovu %d neúspěšné</item>
+        <item quantity="few">Zkusit znovu %d neúspěšná</item>
+        <item quantity="many">Zkusit znovu %d neúspěšného</item>
+        <item quantity="other">Zkusit znovu %d neúspěšných</item>
+    </plurals>
+    <string name="remove_all_downloads">Odebrat všechna stažení</string>
+    <string name="remove_all_downloads_question">Odebrat všechna stažení?</string>
+    <string name="on_this_device_size">%s v tomto zařízení.</string>
+    <string name="removed_server">Odebraný server</string>
+    <string name="downloading_progress">Stahuje se… %d %%</string>
+    <string name="downloading_percent">Stahuje se %d %%</string>
+    <string name="download_failed">Stahování selhalo</string>
+    <string name="download_failed_try_again">Stahování selhalo, zkuste to znovu</string>
+    <string name="cancel_download">Zrušit stahování</string>
+    <string name="try_download_again">Zkusit stáhnout znovu</string>
+    <string name="error_stream_only">Tuto epizodu nejde stáhnout: server ji jen streamuje.</string>
+    <string name="error_no_file">Server soubor neposlal.</string>
+    <string name="error_not_on_device">Tato epizoda není v tomto zařízení. Stáhněte ji, nebo vypněte režim offline.</string>
+    <string name="download_new_episodes">Stahovat nové epizody</string>
+    <string name="newest_n">Nejnovějších %d</string>
+    <string name="delete_when_played">Smazat po přehrání</string>
+    <plurals name="episodes_count_title">
+        <item quantity="one">%d epizoda</item>
+        <item quantity="few">%d epizody</item>
+        <item quantity="many">%d epizody</item>
+        <item quantity="other">%d epizod</item>
+    </plurals>
+    <string name="show_downloads_footer">Nové epizody se stahují samy, nejnovější první, a jen nepřehrané. Zda se čeká na Wi-Fi, určuje Nastavení.</string>
 </resources>

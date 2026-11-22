@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -62,7 +61,7 @@ import audio.own.podcast.library.Chapter
 import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcastplayer.R
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.ui.TabBar
 import audio.own.core.strings.R as SR
 
@@ -73,7 +72,7 @@ import audio.own.core.strings.R as SR
 @Composable
 fun NewEpisodesContent(
     state: PodcastState,
-    player: EpisodePlayer.State,
+    player: PodcastPlayer.State,
     actions: EpisodeActions,
     canPlay: (SourcedEpisode) -> Boolean,
     offlineMode: Boolean,
@@ -196,6 +195,7 @@ fun EpisodeContent(
                     Icon(if (played) Icons.Outlined.Circle else Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(stringResource(if (played) R.string.unplayed else R.string.played), modifier = Modifier.padding(start = Tokens.Spacing.xs))
                 }
+                DownloadButton(ui, actions)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md)) {
                 if (ui.queued) {
@@ -245,12 +245,3 @@ fun EpisodeContent(
     }
 }
 
-/** The Downloads tab until P8 builds downloads. */
-@Composable
-fun DownloadsPlaceholder(bottomBar: @Composable () -> Unit = {}) {
-    TabBar(title = stringResource(R.string.tab_downloads), bottomBar = bottomBar) {
-        Box(Modifier.fillMaxSize().padding(Tokens.Spacing.xl), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.placeholder_coming), style = MaterialTheme.typography.bodyLarge, color = LocalPalette.current.muted, modifier = Modifier.widthIn(max = 420.dp))
-        }
-    }
-}

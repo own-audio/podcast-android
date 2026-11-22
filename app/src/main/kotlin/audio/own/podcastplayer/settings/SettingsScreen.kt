@@ -111,6 +111,8 @@ data class SettingsUi(
     val language: AppLanguage,
     /** "1.0.0 (123)". */
     val version: String,
+    /** What the downloads take on this device. */
+    val downloadsBytes: Long = 0,
 )
 
 @Composable
@@ -126,6 +128,7 @@ fun SettingsContent(
     onLanguage: (AppLanguage) -> Unit,
     onLicences: () -> Unit,
     onLogs: () -> Unit,
+    onDownloads: () -> Unit = {},
 ) {
     var removing by remember { mutableStateOf<ServerRecord?>(null) }
     var choosingLanguage by remember { mutableStateOf(false) }
@@ -140,10 +143,22 @@ fun SettingsContent(
             ButtonRow(stringResource(R.string.add_a_server), onClick = onAddServer, icon = Icons.Filled.Add, color = MaterialTheme.colorScheme.primary)
         }
 
-        // Downloads, Download on Wi-Fi Only and Keep at Most join Offline Mode with the downloads.
-        Section(header = null, footer = stringResource(AppR.string.downloads_offline_footer)) {
+        Section(header = null, footer = stringResource(AppR.string.downloads_settings_footer)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            ValueRow(stringResource(AppR.string.tab_downloads), android.text.format.Formatter.formatShortFileSize(context, ui.downloadsBytes), onClick = onDownloads)
+            RowDivider()
             SwitchLine(stringResource(AppR.string.offline_mode), ui.offlineMode, onOfflineMode)
+            RowDivider()
+            SwitchLine(stringResource(AppR.string.download_wifi_only), ui.playback.wifiOnlyDownloads) { onPlayback(ui.playback.copy(wifiOnlyDownloads = it)) }
+            RowDivider()
+            ChoiceLine(
+                stringResource(AppR.string.keep_at_most),
+                PlaybackSettings.KEEP_AT_MOST_GB,
+                ui.playback.keepAtMostGb,
+                { gb -> if (gb == null) stringResource(AppR.string.no_limit) else stringResource(AppR.string.gb_count, gb) },
+            ) { onPlayback(ui.playback.copy(keepAtMostGb = it)) }
         }
+
 
         PlaybackSection(ui.playback, onPlayback)
         StreamingSection(ui.playback, onPlayback)

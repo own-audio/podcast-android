@@ -197,3 +197,59 @@ suspend fun eventually(timeoutMs: Long = 5_000, condition: () -> Boolean) {
 
 /** View models run on Dispatchers.Main; tests give it one plain thread. */
 fun mainThread() = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+
+/** Downloads that only remember what they were asked; [finish] makes one done. */
+class FakeDownloader : audio.own.podcastplayer.downloads.EpisodeDownloader {
+    val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val _state = MutableStateFlow(audio.own.podcastplayer.downloads.DownloadsState(loaded = true))
+    override val state: kotlinx.coroutines.flow.StateFlow<audio.own.podcastplayer.downloads.DownloadsState> = _state
+    var clock = 1_000L
+
+    fun put(entry: audio.own.podcastplayer.downloads.EpisodeDownload) {
+        _state.value = _state.value.copy(entries = _state.value.entries + (entry.id to entry))
+    }
+
+    fun finish(id: String, bytes: Long, lastPlayedAt: Long? = null) {
+        val entry = _state.value.entries.getValue(id)
+        put(entry.copy(status = audio.own.podcastplayer.downloads.EpisodeDownload.Status.DONE, bytes = bytes, finishedAt = clock++, lastPlayedAt = lastPlayedAt))
+    }
+
+    override fun localFile(id: String): android.net.Uri? = null
+
+    override suspend fun download(item: audio.own.podcast.library.SourcedEpisode, show: audio.own.podcast.library.Show?, automatic: Boolean) {
+        calls += "download ${item.id}" + if (automatic) " auto" else ""
+        if (item.id in _state.value.entries) return
+        put(
+            audio.own.podcastplayer.downloads.EpisodeDownload(
+                id = item.id,
+                record = audio.own.podcastplayer.downloads.DownloadedEpisode(item.source.id, item.episode, show, automatic),
+                status = audio.own.podcastplayer.downloads.EpisodeDownload.Status.DOWNLOADING,
+                queuedAt = clock++,
+            ),
+        )
+    }
+
+    override suspend fun remove(ids: Collection<String>) {
+        for (id in ids) {
+            calls += "remove $id"
+            _state.value = _state.value.copy(entries = _state.value.entries - id)
+        }
+    }
+
+    override suspend fun removeAll(source: String?) {
+        calls += "removeAll $source"
+        _state.value = _state.value.copy(entries = _state.value.entries.filterValues { source != null && it.record.source != source })
+    }
+
+    override suspend fun retryFailed() {
+        calls += "retryFailed"
+    }
+
+    override suspend fun notePlayed(id: String) {
+        calls += "played $id"
+    }
+
+    override suspend fun wifiOnlyChanged() {
+        calls += "wifiOnly"
+    }
+}

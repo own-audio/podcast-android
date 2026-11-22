@@ -23,12 +23,9 @@ import audio.own.podcast.library.GPodderSyncState
 import audio.own.kit.feed.FeedFetcher
 import audio.own.kit.ownaudio.OwnAudioClient
 import audio.own.player.core.PlaybackLink
-import audio.own.player.core.PlaybackLinkRequest
 import audio.own.player.core.PlaybackLinkResolver
 import audio.own.player.core.PlaybackUris
 import audio.own.player.spoken.SpokenChapter
-import audio.own.player.spoken.chapters.BlockCachingRangeReader
-import audio.own.player.spoken.chapters.EmbeddedChapters
 import audio.own.podcast.library.AppleShowCatalogue
 import audio.own.podcast.library.AutoQueue
 import audio.own.podcast.library.Capability
@@ -64,12 +61,16 @@ import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.AppPreferences
 import audio.own.podcastplayer.app.PlaybackSettings
 import audio.own.podcastplayer.app.UserFacingException
-import audio.own.podcastplayer.playback.KeepAheadLoadControl
 import audio.own.podcastplayer.servers.gpodderProblem
 import audio.own.podcastplayer.app.UiText
-import audio.own.podcastplayer.playback.EpisodePlayer
-import audio.own.podcastplayer.playback.HttpRangeReader
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.playback.PlaybackEngine
+import audio.own.podcastplayer.downloads.EpisodeDownloader
+import audio.own.podcastplayer.downloads.DownloadsState
+import audio.own.podcast.library.DownloadRules
+import audio.own.podcast.library.EvictionPolicy
+import audio.own.podcast.library.Playback
+import java.util.concurrent.ConcurrentHashMap
 import audio.own.podcastplayer.servers.ServerKinds
 import audio.own.podcastplayer.servers.ServersState
 import java.text.Collator
@@ -78,7 +79,6 @@ import java.time.Instant
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -94,7 +94,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.ListSerializer
 import okhttp3.OkHttpClient
@@ -165,6 +164,8 @@ data class PodcastState(
     /** gPodder accounts syncing now. */
     val syncing: Set<String> = emptySet(),
     val settings: PlaybackSettings = PlaybackSettings(),
+    /** What is on the device, and on its way. */
+    val downloads: DownloadsState = DownloadsState(),
 ) {
     private val showsByKey: Map<String, Show> by lazy { shows.associate { "${it.source.id}/${it.show.id}" to it.show } }
 
@@ -228,8 +229,8 @@ class PodcastModel(
     private val now: () -> Instant = Instant::now,
     private val country: String? = Locale.getDefault().country,
     private val accounts: ServerAccounts = ServerAccounts.None,
-    /** Drops the player's held link for an episode, so the next open asks the source again. */
-    private val forgetLink: (String) -> Unit = {},
+    /** Episodes kept on the device; none in a model built without them. */
+    private val downloads: EpisodeDownloader = EpisodeDownloader.None,
     /** What Audiobookshelf's sessions show for this device. */
     private val absDevice: DeviceInfo = DeviceInfo("own-audio-podcasts", "own.audio Podcasts", "1", "", ""),
     private val syncDelayMs: Long = SYNC_DELAY_MS,
@@ -261,26 +262,31 @@ class PodcastModel(
     private var knownServers: Set<String>? = null
     private var settings = PlaybackSettings()
     private var syncJob: Job? = null
-    private val refusedOnce = HashSet<String>()
+
     private val throttle = PositionThrottle()
     private var lastRefreshAt: Instant? = null
     private val refreshLock = Mutex()
     private var liveUpdates: Map<String, Job> = emptyMap()
     private var inForeground = false
-    private var chaptersJob: Job? = null
 
     val apple: ShowCatalogue = AppleShowCatalogue(http, country)
 
+    /** Episodes whose last Audiobookshelf link was refused (`401`): the next link takes a new token. */
+    private val refusedLinks = ConcurrentHashMap<String, String>()
+
+    /** Each episode's position as it last went past memory, so an unchanged one isn't sent again. */
+    private val stored = HashMap<String, ListeningProgress>()
+
     init {
-        player.listener = object : EpisodePlayer.Listener {
-            override fun onPosition(report: EpisodePlayer.Report) = positionReported(report)
+        player.listener = object : PodcastPlayer.Listener {
+            override fun onPosition(report: PodcastPlayer.Report) = positionReported(report)
 
             override fun onEnded(id: String, playOn: Boolean) {
                 forgetLastPlayed()
                 if (playOn) scope.launch { playOn(after = id) }
             }
 
-            override fun onRefused(id: String, url: String) = refused(id, url)
+            override fun onLinkFailed(id: String, url: String?, status: Int?) = linkFailed(id, url, status)
         }
     }
 
@@ -303,18 +309,37 @@ class PodcastModel(
         if (active != null && _state.value.sources.none { it.ref.id == active }) setActiveSource(null)
         restoreLastPlayed()
         scope.launch { servers.drop(1).collect { rebuildSources(it) } }
+        // Without a network the player waits, and goes on by itself when it is back.
+        scope.launch { network.map { it.connected }.distinctUntilChanged().collect { player.networkChanged(it) } }
         scope.launch {
             network.map { it.connected }.distinctUntilChanged().drop(1).collect { connected ->
                 _state.update { it.copy(offline = offlineReason()) }
                 if (connected) {
-                    player.retryIfWaiting()
                     sendPendingProgress()
                     reloadLists()
                 }
                 followLiveUpdates()
             }
         }
+        watchDownloads()
         refresh(asked = false)
+    }
+
+    /**
+     * A finished download counts against the storage cap, and the episode playing moves to its
+     * file at the next pause.
+     */
+    private fun watchDownloads() {
+        scope.launch {
+            downloads.state.map { it.totalBytes }.distinctUntilChanged().drop(1).collect { enforceCap() }
+        }
+        scope.launch {
+            downloads.state.collect { held ->
+                _state.update { it.copy(downloads = held) }
+                val playing = player.state.value.item?.id ?: return@collect
+                if (held.isDownloaded(playing)) player.useLocalCopy(playing)
+            }
+        }
     }
 
     /** Offline Mode changed: the lists show what is on the device, or everything again. */
@@ -456,6 +481,7 @@ class PodcastModel(
         librariesRead.remove(serverId)
         passwords.remove(serverId)
         db.forgetServer(serverId)
+        downloads.removeAll(serverId)
         pending.removeAll("$serverId/")
         upNext.removeAll { it.source == serverId }
         if (_state.value.activeSource?.startsWith(serverId) == true) setActiveSource(null)
@@ -614,6 +640,7 @@ class PodcastModel(
                 }
             }
             reloadLists()
+            applyDownloadRules()
             queueNewEpisodes()
         } finally {
             _state.update { it.copy(refreshing = false) }
@@ -625,6 +652,7 @@ class PodcastModel(
         if (isOffline) return
         runCatching { source(show.source)?.refresh(show.show.id, true) }
         reloadLists()
+        applyDownloadRules()
     }
 
     fun setActiveSource(id: String?) {
@@ -652,6 +680,7 @@ class PodcastModel(
         val current = player.state.value.item
         if (current?.source == show.source && current.episode.showId == show.show.id) stopPlayback()
         upNext.removeAll { it.source == show.source.id && it.episode.showId == show.show.id }
+        downloads.remove(downloads.state.value.entries.values.filter { it.record.source == show.source.id && it.record.episode.showId == show.show.id }.map { it.id })
         if (show.source == SourceRef.Phone) scheduleSync()
         _state.update { state ->
             state.copy(
@@ -671,6 +700,7 @@ class PodcastModel(
     fun updateSettings(settings: ShowSettings, show: SourcedShow) = perform {
         source(show.source)?.updateSettings(settings, show.show.id)
         reloadLists()
+        applyDownloadRules()
     }
 
     /** Whether unfollowing takes the show away from the family too (own.audio). */
@@ -719,13 +749,15 @@ class PodcastModel(
                 inbox = if (played) state.inbox.filterNot { it.id == item.id } else state.inbox,
             )
         }
+        if (played) applyDownloadRules()
     }
 
     /**
-     * Offline, only what the listening cache holds whole can play; on mobile data with Downloaded
-     * Only, the same.
+     * Offline, only what is on the device can play: a download, or a whole copy in the listening
+     * cache; on mobile data with Downloaded Only, the same.
      */
-    fun canPlay(item: SourcedEpisode): Boolean = (!isOffline && !onlyDownloaded) || isFullyCached(item.id)
+    fun canPlay(item: SourcedEpisode): Boolean =
+        (!isOffline && !onlyDownloaded) || downloads.state.value.isDownloaded(item.id) || isFullyCached(item.id)
 
     private val onlyDownloaded: Boolean
         get() = settings.mobileData == PlaybackSettings.MobileData.DOWNLOADED_ONLY && network.value.connected && network.value.metered
@@ -740,14 +772,17 @@ class PodcastModel(
      * ([PodcastState.pendingResume]) — unless [automatic] (playing on), where the newer wins.
      */
     suspend fun play(item: SourcedEpisode, startAt: Long? = null, autoplay: Boolean = true, automatic: Boolean = false, quietly: Boolean = false) {
-        val source = source(item.source) ?: return
-        val show = _state.value.show(item) ?: _state.value.upNext.firstOrNull { it.id == item.id }?.show
+        val downloaded = downloads.state.value.entries[item.id]?.takeIf { it.isDone }
+        // A download still plays when its server was removed; it has nowhere to report to.
+        val source = source(item.source)
+        if (source == null && downloaded == null) return
+        val show = _state.value.show(item) ?: _state.value.upNext.firstOrNull { it.id == item.id }?.show ?: downloaded?.record?.show
         var start: Long
         if (startAt != null) {
             start = startAt
         } else {
             val local = _state.value.progress[item.id]
-            val remote = if (item.source == SourceRef.Phone || isOffline) {
+            val remote = if (item.source == SourceRef.Phone || isOffline || source == null) {
                 null
             } else {
                 withTimeoutOrNull(REMOTE_POSITION_TIMEOUT_MS) { runCatching { source.progress(item.episode.key) }.getOrNull() }
@@ -764,13 +799,15 @@ class PodcastModel(
         val skip = show?.settings?.skipIntroSecs ?: 0.0
         if (start == 0L && skip > 0) start = (skip * 1000).toLong()
         if (!canPlay(item)) {
-            if (!quietly) fail(UiText(if (isOffline) R.string.error_cant_play else R.string.error_mobile_data))
+            if (!quietly) fail(UiText(if (isOffline) R.string.error_not_on_device else R.string.error_mobile_data))
             return
         }
-        refusedOnce.remove(item.id)
-        player.load(item, show, start, autoplay, show?.settings?.speed ?: settings.defaultRate)
+
+        refusedLinks.remove(item.id)
+        val chapters = chapters(item, networkAllowed = true)
+        player.load(item, show, start, autoplay, show?.settings?.speed ?: settings.defaultRate, chapters = chapters)
         saveLastPlayed(item, show, start, now())
-        loadChapters(item)
+        if (downloaded != null) downloads.notePlayed(item.id)
     }
 
     fun resolveResume(useOther: Boolean) {
@@ -791,47 +828,33 @@ class PodcastModel(
 
     /** Lets go of the episode everywhere: the player, the mini player, the notification. */
     fun stopPlayback() {
-        chaptersJob?.cancel()
         player.stop()
         forgetLastPlayed()
     }
 
     /**
-     * The episode's chapters, from the first place that has them: the feed's inline ones (or the
-     * server's), the feed's chapters document (kept for offline), the file's own marks within 6 s.
-     * The episode plays meanwhile.
+     * The chapters the player starts with: the feed's inline ones (or the server's), else the
+     * feed's chapters document (fetched once, kept for offline, waited for a moment only). With
+     * none, the player reads the file's own marks.
      */
-    private fun loadChapters(item: SourcedEpisode, networkAllowed: Boolean = true) {
-        chaptersJob?.cancel()
-        chaptersJob = scope.launch {
-            val episode = item.episode
-            var marks = EpisodeChapters.marks(episode.chapters)
+    private suspend fun chapters(item: SourcedEpisode, networkAllowed: Boolean): List<SpokenChapter> {
+        val episode = item.episode
+        var marks = EpisodeChapters.marks(episode.chapters)
+        val url = episode.chaptersUrl
+        if (marks.isEmpty() && url != null) {
             val cached = RoomValueStore(db, "chapters/${item.id}", ListSerializer(Chapter.serializer()))
-            if (marks.isEmpty() && episode.chaptersUrl != null) {
-                marks = EpisodeChapters.marks(cached.load().orEmpty())
-                if (marks.isEmpty() && networkAllowed && !isOffline) {
-                    val fetched = runCatching { feeds.chapters(episode.chaptersUrl!!) }.getOrNull().orEmpty()
-                    val chapters = fetched.map { Chapter(it.startMs, it.endMs, it.title, it.url, it.imageUrl, it.isInTableOfContents) }
-                    if (chapters.isNotEmpty()) cached.save(chapters)
-                    marks = EpisodeChapters.marks(chapters)
+            marks = EpisodeChapters.marks(cached.load().orEmpty())
+            if (marks.isEmpty() && networkAllowed && !isOffline) {
+                // Fetched on the model's scope, so a slow feed host is waited for only briefly
+                // and the document is still kept for the next play.
+                val fetch = scope.async {
+                    val fetched = runCatching { feeds.chapters(url) }.getOrNull().orEmpty()
+                    fetched.map { Chapter(it.startMs, it.endMs, it.title, it.url, it.imageUrl, it.isInTableOfContents) }.also { if (it.isNotEmpty()) cached.save(it) }
                 }
+                marks = EpisodeChapters.marks(withTimeoutOrNull(CHAPTERS_WAIT_MS) { fetch.await() }.orEmpty())
             }
-            if (marks.isEmpty() && networkAllowed && !isOffline) marks = embeddedMarks(item)
-            val duration = player.state.value.takeIf { it.item?.id == item.id }?.durationMs?.takeIf { it > 0 } ?: episode.durationMs ?: 0
-            val chapters = EpisodeChapters.closed(marks, duration).map { SpokenChapter(it.title, it.startMs, it.endMs ?: it.startMs) }
-            player.setChapters(item.id, chapters)
         }
-    }
-
-    /** The file's own marks (ID3 CHAP, an M4A's chapter track, Vorbis comments), read by Range. */
-    private suspend fun embeddedMarks(item: SourcedEpisode): List<EpisodeChapters.Mark> = withContext(Dispatchers.IO) {
-        withTimeoutOrNull(EmbeddedChapters.TIME_LIMIT_MS) {
-            val url = runCatching { linkResolver.resolve(PlaybackLinkRequest(item.id)).url }.getOrNull() ?: return@withTimeoutOrNull emptyList()
-            val reader = BlockCachingRangeReader(HttpRangeReader(http, url))
-            EmbeddedChapters.read(reader).mapIndexed { index, mark ->
-                EpisodeChapters.Mark(mark.startMs, mark.endMs, mark.title ?: strings.chapter(index + 1))
-            }
-        } ?: emptyList()
+        return EpisodeChapters.closed(marks, episode.durationMs ?: 0).map { SpokenChapter(it.title, it.startMs, it.endMs ?: it.startMs) }
     }
 
     /**
@@ -843,40 +866,34 @@ class PodcastModel(
         val (ref, key) = SourcedEpisode.parse(request.mediaId) ?: throw SourceException.NotFound()
         if (offlineMode()) throw SourceException.Network()
         val source = source(ref) ?: throw SourceException.NotFound()
+        refusedLinks.remove(request.mediaId)?.let { refused -> shelf(ref)?.renewAfterRefusal(refused) }
         val playback = source.playback(key)
         // The player asks again a little before a signed link or a token in it runs out.
         PlaybackLink(playback.url, playback.expiresAt?.toEpochMilli())
     }
 
     /**
-     * Audiobookshelf refused the token in an episode's link: one fresh token, then the episode
-     * opens again where it was. A second refusal stays an error.
+     * Audiobookshelf refused the token in an episode's link: the player asks for a link once
+     * more, and that one takes a fresh token. A second refusal is the player's error.
      */
-    private fun refused(id: String, url: String) {
+    private fun linkFailed(id: String, url: String?, status: Int?) {
         val (ref, _) = SourcedEpisode.parse(id) ?: return
-        val shelf = shelf(ref)
-        if (shelf == null || !refusedOnce.add(id)) {
-            fail(UiText(R.string.error_cant_play))
-            return
-        }
-        scope.launch {
-            try {
-                shelf.renewAfterRefusal(url)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                fail(message(error))
-                return@launch
-            }
-            forgetLink(id)
-            player.retry()
-        }
+        if (status == 401 && url != null && shelf(ref) != null) refusedLinks[id] = url
     }
 
-    private fun positionReported(report: EpisodePlayer.Report) {
+    /** Where a download of [item] comes from: the source's own answer, as for playing it. */
+    suspend fun downloadPlayback(item: SourcedEpisode): Playback {
+        // A worker can start before any screen: the sources come with the library's load.
+        _state.first { it.loaded }
+        if (offlineMode()) throw SourceException.Network()
+        val source = source(item.source) ?: throw SourceException.NotFound()
+        return source.playback(item.episode.key)
+    }
+
+    private fun positionReported(report: PodcastPlayer.Report) {
         val (ref, _) = SourcedEpisode.parse(report.id) ?: return
         if (source(ref) == null) return
-        val played = report.reason == EpisodePlayer.Reason.FINISHED || ListeningProgress.reachedEnd(report.positionMs, report.durationMs.takeIf { it > 0 })
+        val played = report.reason == PodcastPlayer.Reason.FINISHED || ListeningProgress.reachedEnd(report.positionMs, report.durationMs.takeIf { it > 0 })
         val value = ListeningProgress(report.positionMs, played, report.at)
         _state.update { state ->
             state.copy(
@@ -885,20 +902,23 @@ class PodcastModel(
             )
         }
         val current = player.state.value
-        if (report.reason != EpisodePlayer.Reason.FINISHED && report.reason != EpisodePlayer.Reason.STOP && current.item?.id == report.id) {
+        if (report.reason != PodcastPlayer.Reason.FINISHED && report.reason != PodcastPlayer.Reason.STOP && current.item?.id == report.id) {
             // The one write every tick: enough to come back here after a kill.
             saveLastPlayed(current.item, current.show, report.positionMs, report.at)
         }
-        if (throttle.isDue(report.reason == EpisodePlayer.Reason.PERIODIC, report.id, played, report.at.toEpochMilli())) {
+        if (throttle.isDue(report.reason == PodcastPlayer.Reason.PERIODIC, report.id, played, report.at.toEpochMilli())) {
             storeProgress(value, report.id)
         }
         // A device episode paused, stopped or finished: the gPodder accounts hear of it shortly.
         if (ref == SourceRef.Phone && report.reason in SYNCING_REASONS) scheduleSync()
+        // Heard to the end: a show's rules may let it go, or fetch the next.
+        if (played && report.reason == PodcastPlayer.Reason.FINISHED) scope.launch { applyDownloadRules() }
     }
 
     /** Into the source's store: the device's database, or a server's queue and then the server. */
     private fun storeProgress(value: ListeningProgress, id: String) {
         val (ref, key) = SourcedEpisode.parse(id) ?: return
+        stored[id] = value
         if (ref == SourceRef.Phone) {
             scope.launch { runCatching { phone.saveProgress(value, key) } }
         } else {
@@ -908,6 +928,7 @@ class PodcastModel(
 
     /** Written to the device first, then sent; it stays until the server has it. */
     private fun send(value: ListeningProgress, id: String) {
+        stored[id] = value
         val entry = PendingProgress.Entry(id, value)
         scope.launch {
             pending.record(entry)
@@ -948,11 +969,16 @@ class PodcastModel(
         }
     }
 
-    /** Going to the background: the position the throttle held back is stored now. */
+    /**
+     * Going to the background: the position the throttle held back is stored now. One that
+     * hasn't moved since it was last stored (an episode left paused) is not sent again: each trip
+     * to the background would otherwise put the same position to the server with a new time.
+     */
     fun flushPosition() {
         val current = player.state.value
         val item = current.item ?: return
         val played = ListeningProgress.reachedEnd(current.positionMs, current.durationMs.takeIf { it > 0 })
+        if (stored[item.id]?.let { it.positionMs == current.positionMs && it.played == played } == true) return
         val value = ListeningProgress(current.positionMs, played, now())
         _state.update { it.copy(progress = it.progress + (item.id to value)) }
         saveLastPlayed(item, current.show, current.positionMs, value.updatedAt)
@@ -975,13 +1001,17 @@ class PodcastModel(
         val ref = SourceRef.parse(last.source) ?: return
         if (source(ref) == null) return
         val item = SourcedEpisode(ref, last.episode)
-        last.missedBy(_state.value.progress[item.id])?.let { missed ->
+        val held = _state.value.progress[item.id]
+        val missed = last.missedBy(held)
+        if (missed != null) {
             _state.update { it.copy(progress = it.progress + (item.id to missed)) }
             storeProgress(missed, item.id)
+        } else {
+            // The source has this position already.
+            stored[item.id] = ListeningProgress(last.positionMs, held?.played ?: false, last.at)
         }
         val show = _state.value.show(item) ?: last.show
-        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: settings.defaultRate, prepare = false)
-        loadChapters(item, networkAllowed = false)
+        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: settings.defaultRate, prepare = false, chapters = chapters(item, networkAllowed = false))
     }
 
     /**
@@ -995,6 +1025,8 @@ class PodcastModel(
         if (isForPlayback) {
             if (!_state.value.loaded) load()
             play(item, startAt = last.positionMs, autoplay = false, quietly = true)
+            // What the player loaded, the downloaded file included, rather than a new placeholder.
+            player.resumptionItems()?.let { return it }
         }
         val metadata = MediaMetadata.Builder()
             .setTitle(last.episode.title)
@@ -1065,6 +1097,78 @@ class PodcastModel(
         result.toQueue.forEach { upNext.playLater(UpNext.Entry(it.id, it.source.id, it.episode, state.show(it))) }
         _state.update { it.copy(upNext = upNext.all()) }
     }
+
+    // endregion
+
+    // region Downloads
+
+    /** Keeps [item] on the device; the listener asked, so it starts now. */
+    fun download(item: SourcedEpisode) = perform {
+        downloads.download(item, _state.value.show(item))
+        enforceCap()
+    }
+
+    fun removeDownload(item: SourcedEpisode) = perform { downloads.remove(listOf(item.id)) }
+
+    /** Try the Download Again: from the start, as the listener's. */
+    fun retryDownload(item: SourcedEpisode) = perform {
+        val show = _state.value.show(item) ?: downloads.state.value.entries[item.id]?.record?.show
+        downloads.remove(listOf(item.id))
+        downloads.download(item, show)
+    }
+
+    fun retryFailedDownloads() = perform { downloads.retryFailed() }
+
+    fun removeAllDownloads() = perform { downloads.removeAll() }
+
+    /**
+     * Each show's rules (download the newest, delete when played, keep at most) against its
+     * episodes as they are now. Offline nothing is downloaded and nothing is let go; the episode
+     * playing is never removed.
+     */
+    suspend fun applyDownloadRules() {
+        if (isOffline) return
+        val state = _state.value
+        val playing = player.state.value.item?.id
+        for (show in state.shows.filter { it.show.settings.hasDownloadRules }) {
+            val episodes = try {
+                episodes(show)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                continue
+            }
+            val held = downloads.state.value
+            val items = episodes.map {
+                DownloadRules.Item(it.id, it.episode.publishedAt ?: it.episode.firstSeenAt, isPlayed = state.progress[it.id]?.played == true, isDownloaded = it.id in held.entries)
+            }
+            val plan = DownloadRules.plan(items, show.show.settings, playing)
+            if (plan.remove.isNotEmpty()) downloads.remove(plan.remove)
+            for (id in plan.download) {
+                val episode = episodes.firstOrNull { it.id == id } ?: continue
+                downloads.download(episode, show.show, automatic = true)
+            }
+            if (plan.download.isNotEmpty() || plan.remove.isNotEmpty()) log.info("downloads", "${show.show.title}: ${plan.download.size} to download, ${plan.remove.size} to remove")
+        }
+        enforceCap()
+    }
+
+    /** Over Keep at Most: played episodes go first, then the ones not played for longest; never the one playing. */
+    private suspend fun enforceCap() = capLock.withLock {
+        val cap = settings.keepAtMostBytes ?: return@withLock
+        val progress = _state.value.progress
+        val candidates = downloads.state.value.entries.values.filter { it.isDone }.map {
+            EvictionPolicy.Candidate(it.id, it.bytes, progress[it.id]?.played == true, Instant.ofEpochMilli(it.lastPlayedAt ?: it.finishedAt ?: it.queuedAt))
+        }
+        val out = EvictionPolicy(cap).evictions(candidates, player.state.value.item?.id)
+        if (out.isEmpty()) return@withLock
+        log.info("downloads", "${out.size} let go over Keep at Most")
+        downloads.remove(out)
+    }
+
+    /** One pass at a time: a removal changes the total, which asks for another pass. */
+    private val capLock = Mutex()
+
 
     // endregion
 
@@ -1143,10 +1247,15 @@ class PodcastModel(
     }
 
     private fun applySettings(next: PlaybackSettings) {
+        val before = settings
         settings = next
+        if (_state.value.loaded) {
+            if (next.wifiOnlyDownloads != before.wifiOnlyDownloads) scope.launch { downloads.wifiOnlyChanged() }
+            if (next.keepAtMostGb != before.keepAtMostGb) scope.launch { enforceCap() }
+        }
         player.setSkipIntervals(SkipIntervals(next.skipBackSecs, next.skipForwardSecs))
         player.smartRewind = SmartRewind(next.smartRewind)
-        player.setKeepAhead(KeepAheadLoadControl.windowMs(next.keepAheadMinutes(network.value.dataSaver)))
+        player.setKeepAhead(next.keepAheadMinutes(network.value.dataSaver) * 60_000L)
         _state.update { it.copy(settings = next) }
     }
 
@@ -1259,7 +1368,10 @@ class PodcastModel(
 
         /** How long after a change on the device the gPodder accounts are synced. */
         const val SYNC_DELAY_MS = 5_000L
-        private val SYNCING_REASONS = setOf(EpisodePlayer.Reason.PAUSE, EpisodePlayer.Reason.STOP, EpisodePlayer.Reason.FINISHED)
+        private val SYNCING_REASONS = setOf(PodcastPlayer.Reason.PAUSE, PodcastPlayer.Reason.STOP, PodcastPlayer.Reason.FINISHED)
+
+        /** How long Play waits for a feed's chapters document the first time. */
+        const val CHAPTERS_WAIT_MS = 3_000L
         val MIN_REFRESH_INTERVAL: Duration = Duration.ofMinutes(15)
 
         /** What the listener is told when something fails. */

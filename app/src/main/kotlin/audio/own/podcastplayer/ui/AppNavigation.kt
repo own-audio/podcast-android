@@ -142,6 +142,7 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
                     accent = accent(container),
                     language = AppLanguage.current(),
                     version = "${container.versionName} (${container.versionCode})",
+                    downloadsBytes = podcasts.downloads.totalBytes,
                 ),
                 onBack = back,
                 onOpenServer = { nav.navigate("server/$it") },
@@ -153,6 +154,7 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
                 onLanguage = { AppLanguage.apply(it); context.findActivity()?.recreate() },
                 onLicences = { nav.navigate(Routes.LICENCES) },
                 onLogs = { nav.navigate(Routes.LOGS) },
+                onDownloads = { nav.navigate(PodcastRoutes.DOWNLOADS) },
             )
         }
         composable(Routes.ADD_SERVER) {

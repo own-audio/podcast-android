@@ -88,7 +88,7 @@ import audio.own.player.core.SleepTimer
 import audio.own.player.spoken.SpeedText
 import audio.own.podcast.library.UpNext
 import audio.own.podcastplayer.R
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.Forward5
@@ -161,7 +161,7 @@ fun SkipIcon(back: Boolean, seconds: Int, size: androidx.compose.ui.unit.Dp, tin
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerContent(
-    player: EpisodePlayer.State,
+    player: PodcastPlayer.State,
     upNext: List<UpNext.Entry>,
     actions: PlayerActions,
     onClose: () -> Unit,
@@ -229,7 +229,7 @@ fun PlayerContent(
                 Scrubber(player, actions)
                 Transport(player, actions)
                 Tools(player, upNext.isNotEmpty(), showOutput, onSheet = { sheet = it }, onOutput = actions::output)
-                if (player.problem == EpisodePlayer.Problem.CANT_PLAY) {
+                if (player.problem == PodcastPlayer.Problem.CANT_PLAY) {
                     Text(stringResource(R.string.error_cant_play), color = palette.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl))
                 }
             }
@@ -245,7 +245,7 @@ fun PlayerContent(
 }
 
 @Composable
-private fun Scrubber(player: EpisodePlayer.State, actions: PlayerActions) {
+private fun Scrubber(player: PodcastPlayer.State, actions: PlayerActions) {
     val palette = LocalPalette.current
     val res = LocalResources.current
     var scrubbing by remember { mutableStateOf<Float?>(null) }
@@ -281,7 +281,7 @@ private fun Scrubber(player: EpisodePlayer.State, actions: PlayerActions) {
 }
 
 @Composable
-private fun Transport(player: EpisodePlayer.State, actions: PlayerActions) {
+private fun Transport(player: PodcastPlayer.State, actions: PlayerActions) {
     val haptics = LocalHapticFeedback.current
     val palette = LocalPalette.current
     Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.xxl), verticalAlignment = Alignment.CenterVertically) {
@@ -305,7 +305,7 @@ private fun Transport(player: EpisodePlayer.State, actions: PlayerActions) {
 }
 
 @Composable
-private fun Tools(player: EpisodePlayer.State, queueNotEmpty: Boolean, showOutput: Boolean, onSheet: (PlayerSheet) -> Unit, onOutput: () -> Unit) {
+private fun Tools(player: PodcastPlayer.State, queueNotEmpty: Boolean, showOutput: Boolean, onSheet: (PlayerSheet) -> Unit, onOutput: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.sm)) {
         val speed = SpeedText.text(player.rate)
         Tool(stringResource(R.string.speed), stringResource(R.string.speed_label, SpeedText.number(player.rate)), tinted = player.rate != 1f, onClick = { onSheet(PlayerSheet.SPEED) }) {
@@ -391,14 +391,14 @@ fun SpeedBody(rate: Float, onRate: (Float) -> Unit) {
 /** The sleep timer: a countdown, the end of the chapter, or the end of the episode. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SleepSheet(player: EpisodePlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
+fun SleepSheet(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = AppBrand.radii.sheetTop, topEnd = AppBrand.radii.sheetTop)) {
         SleepBody(player, actions, onDismiss)
     }
 }
 
 @Composable
-fun SleepBody(player: EpisodePlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
+fun SleepBody(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = Tokens.Spacing.xl)) {
         Text(stringResource(R.string.sleep_timer), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
@@ -439,14 +439,14 @@ private fun SheetRow(label: String, color: androidx.compose.ui.graphics.Color = 
 /** The episode's chapters, the current one marked; a tap plays from there. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChaptersSheet(player: EpisodePlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
+fun ChaptersSheet(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = AppBrand.radii.sheetTop, topEnd = AppBrand.radii.sheetTop)) {
         ChaptersBody(player, actions, onDismiss)
     }
 }
 
 @Composable
-fun ChaptersBody(player: EpisodePlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
+fun ChaptersBody(player: PodcastPlayer.State, actions: PlayerActions, onDismiss: () -> Unit) {
     val palette = LocalPalette.current
     val current = player.currentChapter
     val list = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(player.chapters.indexOf(current) - 2, 0))
@@ -529,7 +529,7 @@ fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boo
 
 /** Above the navigation bar while an episode is loaded: picture, title, time left, play/pause, skip. */
 @Composable
-fun MiniPlayer(player: EpisodePlayer.State, onOpen: () -> Unit, onToggle: () -> Unit, onSkipForward: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniPlayer(player: PodcastPlayer.State, onOpen: () -> Unit, onToggle: () -> Unit, onSkipForward: () -> Unit, modifier: Modifier = Modifier) {
     val item = player.item ?: return
     val res = LocalResources.current
     val subtitle = when {

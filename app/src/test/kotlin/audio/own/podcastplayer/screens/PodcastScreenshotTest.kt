@@ -19,7 +19,7 @@ import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcast.library.SourcedShow
 import audio.own.podcast.library.UpNext
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.podcasts.AddShowContent
 import audio.own.podcastplayer.podcasts.AddShowViewModel
 import audio.own.podcastplayer.podcasts.ChaptersBody
@@ -44,6 +44,12 @@ import audio.own.podcastplayer.podcasts.SpeedBody
 import audio.own.podcastplayer.podcasts.Suggestion
 import audio.own.podcastplayer.podcasts.UpNextBody
 import audio.own.podcastplayer.podcasts.rowUi
+import audio.own.podcastplayer.downloads.DownloadedEpisode
+import audio.own.podcastplayer.downloads.DownloadsContent
+import audio.own.podcastplayer.downloads.DownloadsState
+import audio.own.podcastplayer.downloads.EpisodeDownload
+import audio.own.podcastplayer.downloads.EpisodeDownloads
+
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.time.Instant
 import java.time.LocalDate
@@ -121,7 +127,7 @@ class PodcastScreenshotTest {
         ),
     )
 
-    private val player = EpisodePlayer.State(
+    private val player = PodcastPlayer.State(
         item = e1,
         show = morning,
         isPlaying = true,
@@ -139,6 +145,24 @@ class PodcastScreenshotTest {
         onOfflineMode = {}, onSettings = {}, onSource = {}, onRefresh = {},
         bottomBar = { MiniPlayer(player, {}, {}, {}) },
     )
+
+    /** One downloaded on this device, one on its way from the server, one the server only streams. */
+    private val withDownloads = state.copy(
+        downloads = DownloadsState(
+            entries = listOf(
+                EpisodeDownload(e1.id, DownloadedEpisode(e1.source.id, e1.episode, morning), EpisodeDownload.Status.DONE, bytes = 9_600_000, queuedAt = 3, finishedAt = 3),
+                EpisodeDownload(e2.id, DownloadedEpisode(e2.source.id, e2.episode, science), EpisodeDownload.Status.DOWNLOADING, fraction = 0.4f, queuedAt = 2),
+                EpisodeDownload(e4.id, DownloadedEpisode(e4.source.id, e4.episode, science, automatic = true), EpisodeDownload.Status.FAILED, error = EpisodeDownloads.STREAM_ONLY, queuedAt = 1),
+            ).associateBy { it.id },
+            loaded = true,
+        ),
+    )
+
+    @Composable
+    private fun Downloads() = DownloadsContent(withDownloads, player, EpisodeActions.None, onRetryFailed = {}, onRemoveAll = {}, bottomBar = { MiniPlayer(player, {}, {}, {}) })
+
+    @Composable
+    private fun ShowSettingsPage() = ShowSettingsContent(morning.settings.copy(autoDownload = 3, deleteWhenPlayed = true, keepAtMost = 5), {}, {})
 
     @Composable
     private fun Shows() = ShowsContent(state, ShowSort.TITLE, {}, {}, {}, {})
@@ -158,7 +182,7 @@ class PodcastScreenshotTest {
 
     @Composable
     private fun EpisodePage() = EpisodeContent(
-        ui = state.rowUi(e1, EpisodePlayer.State()),
+        ui = withDownloads.rowUi(e1, PodcastPlayer.State()),
         sourceName = "This Device",
         chapters = chapters,
         actions = EpisodeActions.None,
@@ -253,6 +277,16 @@ class PodcastScreenshotTest {
     @Test fun upNextAndChaptersDark() = shoot("sheets_up_next_chapters_dark", true) { QueueAndChapters() }
     @Test @Config(qualifiers = "+cs") fun upNextAndChaptersCzech() = shoot("sheets_up_next_chapters_cs", false) { QueueAndChapters() }
     @Test @Config(fontScale = 2f) fun upNextAndChaptersLargestText() = shoot("sheets_up_next_chapters_font200", false) { QueueAndChapters() }
+
+    @Test fun downloadsLight() = shoot("downloads_light", false) { Downloads() }
+    @Test fun downloadsDark() = shoot("downloads_dark", true) { Downloads() }
+    @Test @Config(qualifiers = "+cs") fun downloadsCzech() = shoot("downloads_cs", false) { Downloads() }
+    @Test @Config(fontScale = 2f) fun downloadsLargestText() = shoot("downloads_font200", false) { Downloads() }
+    @Test fun downloadsEmptyLight() = shoot("downloads_empty_light", false) { DownloadsContent(state, player, EpisodeActions.None, {}, {}) }
+
+    @Test fun showSettingsLight() = shoot("show_settings_light", false) { ShowSettingsPage() }
+    @Test fun showSettingsDark() = shoot("show_settings_dark", true) { ShowSettingsPage() }
+    @Test @Config(qualifiers = "+cs") fun showSettingsCzech() = shoot("show_settings_cs", false) { ShowSettingsPage() }
 
     @Test fun formsLight() = shoot("forms_light", false) { Forms() }
     @Test @Config(qualifiers = "+cs") fun formsCzech() = shoot("forms_cs", false) { Forms() }

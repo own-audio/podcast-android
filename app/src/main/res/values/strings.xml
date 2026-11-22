@@ -4,7 +4,6 @@
     <string name="tab_shows">Shows</string>
     <string name="tab_downloads">Downloads</string>
     <string name="tab_discover">Discover</string>
-    <string name="placeholder_coming">This screen is still being built.</string>
     <!-- P7: the podcast app's own wording. -->
     <string name="onboarding_tagline">Your podcasts. No account, no server needed.</string>
     <string name="use_own_audio">Use own.audio</string>

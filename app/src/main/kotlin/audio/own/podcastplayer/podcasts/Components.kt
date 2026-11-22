@@ -20,6 +20,16 @@ import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.semantics.contentDescription
+import audio.own.podcastplayer.downloads.EpisodeDownload
+
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoveToInbox
@@ -71,7 +81,7 @@ import audio.own.podcast.library.Show
 import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcastplayer.R
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import audio.own.core.strings.R as SR
@@ -109,6 +119,9 @@ interface EpisodeActions {
     fun playLater(item: SourcedEpisode) {}
     fun removeFromUpNext(item: SourcedEpisode) {}
     fun dismiss(item: SourcedEpisode) {}
+    fun download(item: SourcedEpisode) {}
+    fun removeDownload(item: SourcedEpisode) {}
+    fun retryDownload(item: SourcedEpisode) {}
 
     companion object {
         val None = object : EpisodeActions {}
@@ -124,16 +137,22 @@ data class EpisodeRowUi(
     val current: Boolean,
     val playing: Boolean,
     val canPlay: Boolean,
+    /** On the device or on its way; null when it isn't. */
+    val download: EpisodeDownload? = null,
+    /** Nothing new can be downloaded now. */
+    val offline: Boolean = false,
 )
 
-fun PodcastState.rowUi(item: SourcedEpisode, player: EpisodePlayer.State, canPlay: Boolean = !isOffline) = EpisodeRowUi(
+fun PodcastState.rowUi(item: SourcedEpisode, player: PodcastPlayer.State, canPlay: Boolean = !isOffline) = EpisodeRowUi(
     item = item,
-    show = show(item),
+    show = show(item) ?: downloads.entries[item.id]?.record?.show,
     progress = progress[item.id],
     queued = isQueued(item),
     current = player.item?.id == item.id,
     playing = player.item?.id == item.id && player.isPlaying,
     canPlay = canPlay,
+    download = downloads.entries[item.id],
+    offline = isOffline,
 )
 
 /**
@@ -155,6 +174,10 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
     val playLaterLabel = stringResource(R.string.play_later)
     val removeQueuedLabel = stringResource(R.string.remove_from_up_next)
     val dismissLabel = stringResource(R.string.remove_from_new_episodes)
+    val downloadLabel = stringResource(SR.string.download)
+    val removeDownloadLabel = stringResource(SR.string.remove_download)
+    val cancelDownloadLabel = stringResource(R.string.cancel_download)
+    val retryDownloadLabel = stringResource(R.string.try_download_again)
     SwipeToDismissBox(
         state = swipe,
         modifier = modifier,
@@ -206,6 +229,15 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
                             add(CustomAccessibilityAction(playNextLabel) { actions.playNext(ui.item); true })
                             add(CustomAccessibilityAction(playLaterLabel) { actions.playLater(ui.item); true })
                         }
+                        when (ui.download?.status) {
+                            null -> if (!ui.offline) add(CustomAccessibilityAction(downloadLabel) { actions.download(ui.item); true })
+                            EpisodeDownload.Status.FAILED -> {
+                                if (!ui.offline) add(CustomAccessibilityAction(retryDownloadLabel) { actions.retryDownload(ui.item); true })
+                                add(CustomAccessibilityAction(removeDownloadLabel) { actions.removeDownload(ui.item); true })
+                            }
+                            EpisodeDownload.Status.DOWNLOADING -> add(CustomAccessibilityAction(cancelDownloadLabel) { actions.removeDownload(ui.item); true })
+                            EpisodeDownload.Status.DONE -> add(CustomAccessibilityAction(removeDownloadLabel) { actions.removeDownload(ui.item); true })
+                        }
                         if (inInbox) add(CustomAccessibilityAction(dismissLabel) { actions.dismiss(ui.item); true })
                     }
                 }
@@ -239,6 +271,15 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
                     MenuItem(playNextLabel, Icons.AutoMirrored.Filled.PlaylistPlay) { menu = false; actions.playNext(ui.item) }
                     MenuItem(playLaterLabel, Icons.AutoMirrored.Filled.PlaylistAdd) { menu = false; actions.playLater(ui.item) }
                 }
+                when (ui.download?.status) {
+                    null -> MenuItem(downloadLabel, Icons.Filled.Download, enabled = !ui.offline) { menu = false; actions.download(ui.item) }
+                    EpisodeDownload.Status.FAILED -> {
+                        MenuItem(retryDownloadLabel, Icons.Filled.Refresh, enabled = !ui.offline) { menu = false; actions.retryDownload(ui.item) }
+                        MenuItem(removeDownloadLabel, Icons.Filled.Delete, destructive = true) { menu = false; actions.removeDownload(ui.item) }
+                    }
+                    EpisodeDownload.Status.DOWNLOADING -> MenuItem(cancelDownloadLabel, Icons.Filled.Cancel, destructive = true) { menu = false; actions.removeDownload(ui.item) }
+                    EpisodeDownload.Status.DONE -> MenuItem(removeDownloadLabel, Icons.Filled.Delete, destructive = true) { menu = false; actions.removeDownload(ui.item) }
+                }
                 if (inInbox) MenuItem(dismissLabel, Icons.Filled.MoveToInbox) { menu = false; actions.dismiss(ui.item) }
             }
         }
@@ -246,8 +287,93 @@ fun EpisodeRow(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = M
 }
 
 @Composable
-private fun MenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, contentDescription = null) }, onClick = onClick)
+private fun MenuItem(label: String, icon: ImageVector, enabled: Boolean = true, destructive: Boolean = false, onClick: () -> Unit) {
+    val tint = if (destructive) LocalPalette.current.error else androidx.compose.material3.LocalContentColor.current
+    DropdownMenuItem(
+        text = { Text(label, color = if (destructive) tint else Color.Unspecified) },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = if (destructive) tint else androidx.compose.material3.LocalContentColor.current) },
+        onClick = onClick,
+        enabled = enabled,
+    )
+}
+
+/** Beside an episode's date: a ring while downloading, an arrow when it is on the device. */
+@Composable
+fun DownloadBadge(download: EpisodeDownload?) {
+    val palette = LocalPalette.current
+    when (download?.status) {
+        EpisodeDownload.Status.DONE ->
+            Icon(Icons.Filled.DownloadForOffline, contentDescription = stringResource(SR.string.downloaded), tint = palette.accent, modifier = Modifier.size(14.dp))
+        EpisodeDownload.Status.DOWNLOADING -> {
+            val label = stringResource(R.string.downloading)
+            val fraction = download.fraction
+            val modifier = Modifier.size(11.dp).semantics { contentDescription = label }
+            if (fraction != null) {
+                CircularProgressIndicator(progress = { fraction.coerceAtLeast(0.02f) }, modifier = modifier, strokeWidth = 1.5.dp, trackColor = palette.accent.copy(alpha = 0.25f))
+            } else {
+                CircularProgressIndicator(modifier = modifier, strokeWidth = 1.5.dp)
+            }
+        }
+        EpisodeDownload.Status.FAILED ->
+            Icon(Icons.Filled.ErrorOutline, contentDescription = stringResource(R.string.download_failed), tint = palette.error, modifier = Modifier.size(14.dp))
+        null -> Unit
+    }
+}
+
+/**
+ * The download button on an episode's page: an arrow, a ring while downloading, a check when
+ * done (a tap asks before removing it), a retry after a failure.
+ */
+@Composable
+fun DownloadButton(ui: EpisodeRowUi, actions: EpisodeActions, modifier: Modifier = Modifier) {
+    var confirm by remember { mutableStateOf(false) }
+    val download = ui.download
+    val label = when (download?.status) {
+        EpisodeDownload.Status.DONE -> stringResource(SR.string.downloaded)
+        EpisodeDownload.Status.DOWNLOADING -> stringResource(R.string.downloading_percent, ((download.fraction ?: 0f) * 100).toInt())
+        EpisodeDownload.Status.FAILED -> stringResource(R.string.download_failed_try_again)
+        null -> stringResource(SR.string.download)
+    }
+    androidx.compose.material3.OutlinedIconButton(
+        onClick = {
+            when (download?.status) {
+                EpisodeDownload.Status.DONE -> confirm = true
+                EpisodeDownload.Status.DOWNLOADING -> Unit
+                EpisodeDownload.Status.FAILED -> actions.retryDownload(ui.item)
+                null -> actions.download(ui.item)
+            }
+        },
+        enabled = !(ui.offline && (download == null || download.status == EpisodeDownload.Status.FAILED)),
+        modifier = modifier.size(Tokens.minTarget).semantics { contentDescription = label },
+        colors = androidx.compose.material3.IconButtonDefaults.outlinedIconButtonColors(contentColor = LocalPalette.current.accent),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LocalPalette.current.border),
+    ) {
+        when (download?.status) {
+            EpisodeDownload.Status.DONE -> Icon(Icons.Filled.CheckCircle, contentDescription = null)
+            EpisodeDownload.Status.DOWNLOADING -> {
+                val fraction = download.fraction
+                if (fraction != null) {
+                    CircularProgressIndicator(progress = { fraction.coerceAtLeast(0.02f) }, modifier = Modifier.size(22.dp), strokeWidth = 3.dp)
+                } else {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 3.dp)
+                }
+            }
+            EpisodeDownload.Status.FAILED -> Icon(Icons.Filled.Refresh, contentDescription = null)
+            null -> Icon(Icons.Filled.Download, contentDescription = null)
+        }
+    }
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(SR.string.remove_download_question)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirm = false; actions.removeDownload(ui.item) }) {
+                    Text(stringResource(SR.string.remove_download), color = LocalPalette.current.error)
+                }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = false }) { Text(stringResource(SR.string.cancel)) } },
+        )
+    }
 }
 
 @Composable
@@ -271,6 +397,7 @@ private fun Words(ui: EpisodeRowUi, showsShowTitle: Boolean, lineLimit: Int, mod
             if (ui.queued) {
                 Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.in_up_next), tint = palette.accent, modifier = Modifier.size(14.dp))
             }
+            DownloadBadge(ui.download)
             Text(
                 ProgressText.line(res, ui.item.episode, ui.progress),
                 style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),

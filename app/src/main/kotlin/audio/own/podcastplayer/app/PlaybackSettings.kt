@@ -17,7 +17,13 @@ data class PlaybackSettings(
     val mobileData: MobileData = MobileData.STREAM,
     /** While streaming, how many minutes ahead of the playhead are kept on the device. */
     val keepAheadMinutes: Int = 10,
+    /** Downloads, the listener's and the rules', wait for an unmetered network. */
+    val wifiOnlyDownloads: Boolean = true,
+    /** Keep at Most, in GB; null is no limit. */
+    val keepAtMostGb: Int? = null,
 ) {
+    val keepAtMostBytes: Long? get() = keepAtMostGb?.let { it.toLong() shl 30 }
+
     /** The books app has a third choice, Saver; a feed has one file per episode, nothing smaller to ask for. */
     enum class MobileData { STREAM, DOWNLOADED_ONLY }
 
@@ -29,6 +35,7 @@ data class PlaybackSettings(
         val SPEED_CHOICES = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
         val KEEP_AHEAD_CHOICES = listOf(5, 10, 15)
         const val LOW_DATA_KEEP_AHEAD = 5
+        val KEEP_AT_MOST_GB: List<Int?> = listOf(null, 1, 2, 5, 10)
     }
 }
 

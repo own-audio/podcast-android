@@ -21,6 +21,9 @@ import audio.own.podcast.library.FeedLoader
 import audio.own.podcast.library.LastPlayed
 import audio.own.podcast.library.PendingProgress
 import audio.own.podcast.library.Show
+import audio.own.podcast.library.ShowSettings
+import audio.own.podcastplayer.R
+import audio.own.podcastplayer.app.UiText
 import audio.own.podcast.library.SourceRef
 import audio.own.podcast.library.SourcedEpisode
 import audio.own.podcast.library.UpNext
@@ -30,9 +33,10 @@ import audio.own.podcast.library.room.RoomFeedLibraryStore
 import audio.own.podcast.library.room.RoomValueStore
 import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.MemoryPreferences
+import audio.own.podcastplayer.FakeDownloader
 import audio.own.podcastplayer.eventually
 import audio.own.podcastplayer.mainThread
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.playback.PlaybackEngine
 import audio.own.podcastplayer.servers.ServersState
 import java.time.Instant
@@ -60,22 +64,21 @@ import org.robolectric.annotation.Config
 
 private const val FEED = "https://feeds.example.com/show.xml"
 
-/** Stands in for [EpisodePlayer]: remembers what it was asked and plays nothing. */
+/** Stands in for [PodcastPlayer]: remembers what it was asked and plays nothing. */
 class FakeEngine : PlaybackEngine {
-    data class Load(val id: String, val startMs: Long, val autoplay: Boolean, val rate: Float, val prepare: Boolean)
+    data class Load(val id: String, val startMs: Long, val autoplay: Boolean, val rate: Float, val prepare: Boolean, val chapters: List<SpokenChapter> = emptyList())
 
-    private val _state = MutableStateFlow(EpisodePlayer.State())
-    override val state: StateFlow<EpisodePlayer.State> = _state
-    override var listener: EpisodePlayer.Listener? = null
+    private val _state = MutableStateFlow(PodcastPlayer.State())
+    override val state: StateFlow<PodcastPlayer.State> = _state
+    override var listener: PodcastPlayer.Listener? = null
     override var smartRewind = SmartRewind()
     val loads = mutableListOf<Load>()
 
-    override fun load(item: SourcedEpisode, show: Show?, startMs: Long, autoplay: Boolean, rate: Float, prepare: Boolean) {
-        loads += Load(item.id, startMs, autoplay, rate, prepare)
-        _state.update { it.copy(item = item, show = show, positionMs = startMs, durationMs = item.episode.durationMs ?: 0, rate = rate, isPlaying = autoplay) }
+    override fun load(item: SourcedEpisode, show: Show?, startMs: Long, autoplay: Boolean, rate: Float, prepare: Boolean, chapters: List<SpokenChapter>) {
+        loads += Load(item.id, startMs, autoplay, rate, prepare, chapters)
+        _state.update { it.copy(item = item, show = show, positionMs = startMs, durationMs = item.episode.durationMs ?: 0, rate = rate, isPlaying = autoplay, chapters = chapters) }
     }
 
-    override fun setChapters(id: String, chapters: List<SpokenChapter>) = _state.update { it.copy(chapters = chapters) }
     override fun play() = _state.update { it.copy(isPlaying = true) }
     override fun pause() = _state.update { it.copy(isPlaying = false) }
     override fun toggle() = _state.update { it.copy(isPlaying = !it.isPlaying) }
@@ -83,31 +86,36 @@ class FakeEngine : PlaybackEngine {
     override fun skipBack() = Unit
     override fun skipForward() = Unit
     override fun setRate(rate: Float) = _state.update { it.copy(rate = rate) }
-    override fun retryIfWaiting() = Unit
-    var retries = 0
+    val network = mutableListOf<Boolean>()
+    override fun networkChanged(connected: Boolean) {
+        network += connected
+    }
     var keepAheadMs = 0L
-    override fun retry() {
-        retries++
+    val localCopies = mutableListOf<String>()
+    override fun useLocalCopy(id: String) {
+        localCopies += id
     }
     override fun setSkipIntervals(skip: SkipIntervals) = _state.update { it.copy(skip = skip) }
     override fun setKeepAhead(ms: Long) {
         keepAheadMs = ms
     }
-    override fun stop() = _state.update { EpisodePlayer.State() }
+    override fun stop() = _state.update { PodcastPlayer.State() }
     override fun sleepAfter(preset: SleepTimer.Preset) = Unit
     override fun sleepAtEndOfEpisode() = Unit
     override fun stopAtEndOfChapter(on: Boolean) = Unit
     override fun extendSleep() = Unit
     override fun cancelSleep() = Unit
 
-    fun report(reason: EpisodePlayer.Reason, positionMs: Long, at: Instant) {
+    fun report(reason: PodcastPlayer.Reason, positionMs: Long, at: Instant) {
         val item = _state.value.item ?: return
-        listener?.onPosition(EpisodePlayer.Report(item.id, positionMs, _state.value.durationMs, reason, at))
+        _state.update { it.copy(positionMs = positionMs) }
+        listener?.onPosition(PodcastPlayer.Report(item.id, positionMs, _state.value.durationMs, reason, at))
     }
+
 
     fun finish(at: Instant) {
         val item = _state.value.item ?: return
-        report(EpisodePlayer.Reason.FINISHED, _state.value.durationMs, at)
+        report(PodcastPlayer.Reason.FINISHED, _state.value.durationMs, at)
         listener?.onEnded(item.id, playOn = true)
     }
 }
@@ -144,6 +152,9 @@ class PodcastModelTest {
         main.close()
     }
 
+    private val downloads = FakeDownloader()
+    private var offline = false
+
     private fun model(engine: FakeEngine = FakeEngine()): Pair<PodcastModel, FakeEngine> {
         val upNext = UpNext(RoomValueStore(db, "up-next", ListSerializer(UpNext.Entry.serializer())))
         val phone = FeedLibrary(RoomFeedLibraryStore(db), loader, now = { time })
@@ -158,7 +169,7 @@ class PodcastModelTest {
             client = { null },
             preferences = MemoryPreferences(),
             network = MutableStateFlow(NetworkState(connected = true, metered = false, dataSaver = false, signature = "wifi")),
-            offlineMode = { false },
+            offlineMode = { offline },
             http = OkHttpClient(),
             feeds = FeedFetcher(OkHttpClient(), FeedParser(XmlParserFactory { Xml.newPullParser() })),
             isFullyCached = { false },
@@ -170,6 +181,7 @@ class PodcastModelTest {
             scope = CoroutineScope(SupervisorJob() + main),
             now = { time },
             country = "us",
+            downloads = downloads,
         )
         return model to engine
     }
@@ -209,7 +221,7 @@ class PodcastModelTest {
         val item = model.state.value.inbox.first()
         onMain { model.play(item) }
         assertEquals(FakeEngine.Load(item.id, 30_000, autoplay = true, rate = 1.5f, prepare = true), engine.loads.last())
-        engine.report(EpisodePlayer.Reason.PAUSE, 600_000, time)
+        engine.report(PodcastPlayer.Reason.PAUSE, 600_000, time)
         runBlocking { eventually { onMain { model.phone.progress(item.episode.key) }?.positionMs == 600_000L } }
         onMain { model.play(item) }
         assertEquals("the intro is skipped only from the start", 600_000L, engine.loads.last().startMs)
@@ -223,15 +235,15 @@ class PodcastModelTest {
         val item = model.state.value.inbox.first()
         onMain { model.play(item) }
         val key = item.episode.key
-        engine.report(EpisodePlayer.Reason.PERIODIC, 10_000, time)
+        engine.report(PodcastPlayer.Reason.PERIODIC, 10_000, time)
         runBlocking { eventually { onMain { model.phone.progress(key) }?.positionMs == 10_000L } }
-        engine.report(EpisodePlayer.Reason.PERIODIC, 20_000, time.plusSeconds(10))
-        engine.report(EpisodePlayer.Reason.PERIODIC, 30_000, time.plusSeconds(20))
+        engine.report(PodcastPlayer.Reason.PERIODIC, 20_000, time.plusSeconds(10))
+        engine.report(PodcastPlayer.Reason.PERIODIC, 30_000, time.plusSeconds(20))
         Thread.sleep(200)
         assertEquals("held back by the minute's throttle", 10_000L, onMain { model.phone.progress(key) }?.positionMs)
         assertEquals("the screens have it at once", 30_000L, model.state.value.progress[item.id]?.positionMs)
         assertEquals("and so does last-played", 30_000L, lastPlayed.value?.positionMs)
-        engine.report(EpisodePlayer.Reason.PAUSE, 31_000, time.plusSeconds(21))
+        engine.report(PodcastPlayer.Reason.PAUSE, 31_000, time.plusSeconds(21))
         runBlocking { eventually { onMain { model.phone.progress(key) }?.positionMs == 31_000L } }
     }
 
@@ -265,10 +277,10 @@ class PodcastModelTest {
         onMain { first.follow(FEED) }
         val item = first.state.value.inbox.first()
         onMain { first.play(item) }
-        engine.report(EpisodePlayer.Reason.PERIODIC, 5_000, time)
+        engine.report(PodcastPlayer.Reason.PERIODIC, 5_000, time)
         runBlocking { eventually { onMain { first.phone.progress(item.episode.key) }?.positionMs == 5_000L } }
         // Ten seconds on, killed before the minute's write.
-        engine.report(EpisodePlayer.Reason.PERIODIC, 15_000, time.plusSeconds(10))
+        engine.report(PodcastPlayer.Reason.PERIODIC, 15_000, time.plusSeconds(10))
         runBlocking { eventually { lastPlayed.value?.positionMs == 15_000L } }
 
         val (second, restarted) = model(FakeEngine())
@@ -278,7 +290,115 @@ class PodcastModelTest {
     }
 
     @Test
+    fun `a show's rules fetch its newest episodes after each refresh, as a rule's downloads`() {
+        val (model, _) = model()
+        onMain { model.load() }
+        val show = onMain { model.follow(FEED) }
+        val (e2, e1) = onMain { model.episodes(show) }.sortedByDescending { it.episode.publishedAt }
+        model.updateSettings(ShowSettings(autoDownload = 1), show)
+        runBlocking { eventually { "download ${e2.id} auto" in downloads.calls } }
+        assertFalse("never the back catalogue", downloads.calls.any { it.startsWith("download ${e1.id}") })
+
+        time = time.plusSeconds(3600)
+        document = feed("e1" to 1, "e2" to 2, "e3" to 3)
+        onMain { model.refresh(asked = true) }
+        assertTrue("the new one after the refresh", downloads.calls.any { it.startsWith("download ") && it.endsWith("|e3 auto") })
+    }
+
+    @Test
+    fun `offline, the rules leave everything as it is`() {
+        val (model, _) = model()
+        onMain { model.load() }
+        val show = onMain { model.follow(FEED) }
+        offline = true
+        model.offlineModeChanged()
+        model.updateSettings(ShowSettings(autoDownload = 3, deleteWhenPlayed = true), show)
+        runBlocking { eventually { model.state.value.shows.single().show.settings.autoDownload == 3 } }
+        onMain { model.applyDownloadRules() }
+        assertTrue(downloads.calls.isEmpty())
+    }
+
+    @Test
+    fun `Delete When Played lets go of a played download, never of the one playing`() {
+        val (model, _) = model()
+        onMain { model.load() }
+        val show = onMain { model.follow(FEED) }
+        model.updateSettings(ShowSettings(deleteWhenPlayed = true), show)
+        runBlocking { eventually { model.state.value.shows.single().show.settings.deleteWhenPlayed } }
+        val (e2, e1) = onMain { model.episodes(show) }.sortedByDescending { it.episode.publishedAt }
+        onMain {
+            downloads.download(e1, show.show)
+            downloads.download(e2, show.show)
+        }
+        downloads.finish(e1.id, 1_000)
+        downloads.finish(e2.id, 1_000)
+        onMain { model.play(e2) }
+        model.markPlayed(e2, true)
+        model.markPlayed(e1, true)
+        runBlocking { eventually { "remove ${e1.id}" in downloads.calls } }
+        assertFalse("the episode playing stays", "remove ${e2.id}" in downloads.calls)
+    }
+
+    @Test
+    fun `over Keep at Most, played downloads go first, then the longest unplayed, never the one playing`() {
+        val (model, _) = model()
+        onMain { model.load() }
+        document = feed("e1" to 1, "e2" to 2, "e3" to 3)
+        val show = onMain { model.follow(FEED) }
+        val (e3, e2, e1) = onMain { model.episodes(show) }.sortedByDescending { it.episode.publishedAt }
+        val gb = 1L shl 30
+        onMain { listOf(e1, e2, e3).forEach { downloads.download(it, show.show) } }
+        downloads.finish(e3.id, gb * 6 / 10, lastPlayedAt = 10)
+        downloads.finish(e2.id, gb * 6 / 10, lastPlayedAt = 20)
+        downloads.finish(e1.id, gb * 6 / 10, lastPlayedAt = 30)
+        onMain { model.play(e2) }
+        model.markPlayed(e1, true)
+        runBlocking { eventually { model.state.value.progress[e1.id]?.played == true } }
+        downloads.calls.clear()
+        model.setPlaybackSettings(model.state.value.settings.copy(keepAtMostGb = 1))
+        runBlocking { eventually { downloads.calls.size >= 2 } }
+        assertEquals(listOf("remove ${e1.id}", "remove ${e3.id}"), downloads.calls.toList())
+    }
+
+    @Test
+    fun `offline, a downloaded episode plays and the others don't`() {
+        val (model, engine) = model()
+        onMain { model.load() }
+        val show = onMain { model.follow(FEED) }
+        val (e2, e1) = onMain { model.episodes(show) }.sortedByDescending { it.episode.publishedAt }
+        onMain { downloads.download(e1, show.show) }
+        downloads.finish(e1.id, 1_000)
+        offline = true
+        model.offlineModeChanged()
+        assertTrue(model.canPlay(e1))
+        assertFalse("greyed in the lists", model.canPlay(e2))
+        onMain { model.play(e2) }
+        assertEquals(UiText(R.string.error_not_on_device), model.state.value.error)
+        assertTrue(engine.loads.isEmpty())
+        onMain { model.play(e1) }
+        assertEquals(e1.id, engine.loads.single().id)
+        runBlocking { eventually { "played ${e1.id}" in downloads.calls } }
+    }
+
+    @Test
+    fun `asking for a download starts it as the listener's, and Remove takes it away`() {
+        val (model, _) = model()
+        onMain { model.load() }
+        onMain { model.follow(FEED) }
+        val item = model.state.value.inbox.first()
+        model.download(item)
+        runBlocking { eventually { "download ${item.id}" in downloads.calls } }
+        runBlocking { eventually { model.state.value.downloads.entries.containsKey(item.id) } }
+        assertEquals("the row shows it", audio.own.podcastplayer.downloads.EpisodeDownload.Status.DOWNLOADING, model.state.value.rowUi(item, engine(model)).download?.status)
+        model.removeDownload(item)
+        runBlocking { eventually { model.state.value.downloads.entries.isEmpty() } }
+    }
+
+    private fun engine(model: PodcastModel) = model.player.state.value
+
+    @Test
     fun `unfollowing stops its episode and takes it out of Up Next`() {
+
         val (model, engine) = model()
         onMain { model.load() }
         val show = onMain { model.follow(FEED) }

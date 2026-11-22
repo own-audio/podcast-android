@@ -24,9 +24,9 @@ both (P0).
 | P3 | Audiobookshelf podcast libraries | ☑ 2026-11-22: signed in and played on a real server (server files with `?token=`, feed-only episodes from the publisher) |
 | P4 | own.audio on v2, follow and unfollow included | ◐ source built 2026-11-21, live read test passes; the follow/play/unfollow round trip on a real account comes with the screens |
 | P5 | gPodder sync (`:kit:gpodder`) | ☑ 2026-11-22: signed in to podfetch, first sync merged both ways, Sync Now and Last Synced |
-| P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ◐ built 2026-11-21: two public feeds followed with no account, played with the notification and skip buttons, Up Next played on, resumed after a kill; the demo's shows played and resumed at the server's position. Open: Audiobookshelf/gPodder in the app, Share with the Family, the source built twice on first address choice, early renewal of expiring own.audio links, swap EpisodePlayer for :player:spoken's player |
+| P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ☑ 2026-11-22 (the player is now `:player:spoken`'s) |
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
-| P8 | Downloads, per-show rules, offline, refresh | ☐ |
+| P8 | Downloads, per-show rules, offline, refresh | ☑ 2026-11-22: a 144 MB episode resumed after a kill and played offline; "Newest 1" fetched by itself after a refresh |
 | P9 | Settings | ☑ 2026-11-22 (Playback, Streaming, Offline Mode; the Downloads rows come with P8) |
 | P10 | Summaries and Ask (hosted own.audio) | ☐ |
 | P11 | Android Auto, widget, deep links, voice, background refresh | ☐ |
@@ -34,7 +34,7 @@ both (P0).
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P3, P5 and P9 done 2026-11-22, with the P6 fixes (each source made once; links renewed before they expire) and Share with the Family. Next: P8 downloads and per-show rules (`:core:downloads` is in the repo), then P10 summaries, P11 system integrations. Still open from P6: swap `EpisodePlayer` for `:player:spoken`'s player.
+**Where we stopped:** P8 done 2026-11-22 and the player moved to `:player:spoken`. Next: P10 summaries and Ask, P11 Android Auto/widget/links/voice, P12 polish, the guide. Wanted in `:player:spoken` (book-android): a part's length taken from ExoPlayer, `setChapters` after loading, swapping a part's file without reloading.
 
 ## Rules for whoever executes this plan
 

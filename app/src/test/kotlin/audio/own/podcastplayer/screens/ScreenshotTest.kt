@@ -114,7 +114,7 @@ class ScreenshotTest {
             listOf(home, demo, shelf, sync),
             connections = mapOf("s1" to ConnectionState.Connected("http://192.168.1.10:8080"), "s3" to ConnectionState.Unreachable),
             playback = PlaybackSettings(skipBackSecs = 15, skipForwardSecs = 30, defaultRate = 1.25f),
-            accent = AccentChoice.APP, language = AppLanguage.SYSTEM, version = "1.0.0 (123)"),
+            accent = AccentChoice.APP, language = AppLanguage.SYSTEM, version = "1.0.0 (123)", downloadsBytes = 734_000_000),
         onBack = {}, onOpenServer = {}, onRemoveServer = {}, onAddServer = {}, onOfflineMode = {}, onPlayback = {}, onAccent = {}, onLanguage = {}, onLicences = {}, onLogs = {},
     )
 

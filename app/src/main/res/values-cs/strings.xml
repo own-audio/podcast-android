@@ -4,7 +4,6 @@
     <string name="tab_shows">Pořady</string>
     <string name="tab_downloads">Stažené</string>
     <string name="tab_discover">Objevovat</string>
-    <string name="placeholder_coming">Tahle obrazovka se ještě staví.</string>
     <!-- P7: the podcast app's own wording. -->
     <string name="onboarding_tagline">Vaše podcasty. Bez účtu, bez serveru.</string>
     <string name="use_own_audio">Použít own.audio</string>

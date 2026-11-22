@@ -43,7 +43,7 @@ import audio.own.podcastplayer.podcasts.CategoryContent
 import audio.own.podcastplayer.podcasts.CategoryViewModel
 import audio.own.podcastplayer.podcasts.DiscoverContent
 import audio.own.podcastplayer.podcasts.DiscoverViewModel
-import audio.own.podcastplayer.podcasts.DownloadsPlaceholder
+import audio.own.podcastplayer.downloads.DownloadsContent
 import audio.own.podcastplayer.podcasts.EpisodeActions
 import audio.own.podcastplayer.podcasts.EpisodeContent
 import audio.own.podcastplayer.podcasts.FamilySharing
@@ -74,6 +74,7 @@ object PodcastRoutes {
     const val CATEGORY = "category/{key}"
     const val RESULT = "result/{id}"
     const val PLAYER = "player"
+    const val DOWNLOADS = "downloads"
 
     fun show(show: SourcedShow) = "show/${Uri.encode(show.id)}"
     fun showSettings(show: SourcedShow) = "show-settings/${Uri.encode(show.id)}"
@@ -121,6 +122,12 @@ class ModelActions(
     override fun removeFromUpNext(item: SourcedEpisode) = model.removeFromUpNext(item.id)
 
     override fun dismiss(item: SourcedEpisode) = model.dismiss(item)
+
+    override fun download(item: SourcedEpisode) = model.download(item)
+
+    override fun removeDownload(item: SourcedEpisode) = model.removeDownload(item)
+
+    override fun retryDownload(item: SourcedEpisode) = model.retryDownload(item)
 
     override fun toggle() = model.player.toggle()
 
@@ -233,7 +240,14 @@ fun PodcastTabs(container: AppContainer, nav: NavHostController, onSettings: () 
                 onRefresh = { scope.launch { model.refresh(asked = true) } },
                 bottomBar = mini,
             )
-            Tab.DOWNLOADS -> DownloadsPlaceholder(bottomBar = mini)
+            Tab.DOWNLOADS -> DownloadsContent(
+                state = state,
+                player = player,
+                actions = actions,
+                onRetryFailed = model::retryFailedDownloads,
+                onRemoveAll = model::removeAllDownloads,
+                bottomBar = mini,
+            )
             Tab.DISCOVER -> DiscoverRoute(container, nav, actions, onBack = null, bottomBar = mini)
         }
     }
@@ -331,6 +345,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         val state by model.state.collectAsStateWithLifecycle()
         val player by container.player.state.collectAsStateWithLifecycle()
         val item = container.navStash.episodes[episodeId] ?: state.inbox.firstOrNull { it.id == episodeId }
+            ?: state.downloads.entries[episodeId]?.record?.item
         if (item == null) {
             LaunchedEffect(Unit) { nav.popBackStack() }
             return@composable
@@ -351,6 +366,19 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
                     scope.launch { model.play(item, startAt = start) }
                 }
             },
+            onBack = back,
+            bottomBar = rememberMiniPlayer(container, nav),
+        )
+    }
+    composable(PodcastRoutes.DOWNLOADS) {
+        val state by model.state.collectAsStateWithLifecycle()
+        val player by container.player.state.collectAsStateWithLifecycle()
+        DownloadsContent(
+            state = state,
+            player = player,
+            actions = rememberModelActions(container, nav),
+            onRetryFailed = model::retryFailedDownloads,
+            onRemoveAll = model::removeAllDownloads,
             onBack = back,
             bottomBar = rememberMiniPlayer(container, nav),
         )

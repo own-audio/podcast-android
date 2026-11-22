@@ -49,7 +49,18 @@ import audio.own.podcast.library.room.PodcastDatabase
 import audio.own.podcast.library.room.RoomFeedLibraryStore
 import audio.own.podcast.library.room.RoomValueStore
 import audio.own.podcastplayer.playback.Artwork
-import audio.own.podcastplayer.playback.EpisodePlayer
+import audio.own.podcastplayer.playback.PodcastPlayer
+import audio.own.player.spoken.SpokenPlayer
+import audio.own.player.spoken.chapters.PartReaders
+import audio.own.player.spoken.media.LookAheadLoadControl
+import audio.own.player.spoken.media.Prefetcher
+import audio.own.player.spoken.media.SignalWaitPolicy
+import audio.own.player.spoken.media.SpokenMediaSourceFactory
+import audio.own.podcastplayer.downloads.EpisodeDownloads
+import audio.own.podcastplayer.servers.ServerKinds
+import audio.own.kit.ownaudio.HoldingRef
+import audio.own.kit.ownaudio.updateHoldings
+import androidx.work.DelegatingWorkerFactory
 import audio.own.podcastplayer.podcasts.PodcastModel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -151,7 +162,50 @@ class AppContainer(context: Context) {
         userAgent = userAgent,
     )
 
-    val player = EpisodePlayer(app, playbackSources, mainScope)
+    private val lookAhead = LookAheadLoadControl()
+
+    /**
+     * The one player of the process: `:player:spoken`'s, through the listening cache and the
+     * links, with Keep Ahead's window and the wait for a signal.
+     */
+    val player: PodcastPlayer = PodcastPlayer(
+        context = app,
+        spoken = SpokenPlayer(
+            player = SpokenPlayer.buildExoPlayer(app, SpokenMediaSourceFactory(app, playbackSources, SignalWaitPolicy { network.state.value.connected }), lookAhead),
+            scope = mainScope,
+            links = playbackSources.links,
+            prefetcher = Prefetcher(playbackSources, mainScope),
+            openPart = PartReaders(playbackSources.links, http)::open,
+            loadControl = lookAhead,
+        ).also { spoken ->
+            spoken.chapterTitle = { app.getString(R.string.chapter_number, it + 1) }
+            // Whole episodes ahead only on Wi-Fi; on mobile data, Keep Ahead's window.
+            spoken.canPrefetchWhole = { network.state.value.let { it.connected && !it.metered && !it.dataSaver } }
+        },
+        scope = mainScope,
+    ).also { it.localFile = { id -> downloads.localFile(id) } }
+
+    /** Episodes kept on the device: what the listener downloads and what the shows' rules fetch. */
+    val downloads: EpisodeDownloads by lazy {
+        EpisodeDownloads(
+            context = app,
+            http = http,
+            userAgent = userAgent,
+            proxyMemory = playbackSources.proxyMemory,
+            playback = { item -> podcasts.downloadPlayback(item) },
+            wifiOnly = { podcasts.state.value.settings.wifiOnlyDownloads },
+            playing = { player.state.value.item?.id },
+            reportHoldings = { serverId, episodeIds ->
+                val record = servers.state.value.server(serverId)
+                if (record?.kind == ServerKinds.OWN_AUDIO) servers.client(serverId)?.updateHoldings(items = episodeIds.map { HoldingRef("episode", it) })
+            },
+            log = log,
+            scope = scope,
+        )
+    }
+
+    /** WorkManager's workers, with their dependencies. */
+    val workerFactory = DelegatingWorkerFactory().apply { addFactory(downloads.workerFactory) }
 
     val artwork = Artwork(app)
 
@@ -195,7 +249,8 @@ class AppContainer(context: Context) {
 
                 override suspend fun updateLibraries(serverId: String, libraries: List<ServerLibraryRef>) = servers.updateLibraries(serverId, libraries)
             },
-            forgetLink = { id -> playbackSources.links.forget(PlaybackLinkRequest(id)) },
+            downloads = downloads,
+
             absDevice = DeviceInfo(
                 deviceId = "own-audio-podcasts-android",
                 clientName = "own.audio Podcasts",

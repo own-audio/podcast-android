@@ -1,11 +1,13 @@
 package audio.own.podcastplayer
 
 import android.app.Application
+import androidx.work.Configuration
 import audio.own.core.servers.MobileData
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class OwnAudioApp : Application() {
+class OwnAudioApp : Application(), Configuration.Provider {
     lateinit var container: AppContainer
         private set
 
@@ -29,5 +31,14 @@ class OwnAudioApp : Application() {
         // The library loads at launch, not with the first screen: the media service and the
         // last episode's resumption need it too.
         container.mainScope.launch { container.podcasts.load() }
+        // Once the sources and settings are read: what the index doesn't know goes, and what
+        // waited (killed mid-download) starts again.
+        container.scope.launch {
+            container.podcasts.state.first { it.loaded }
+            container.downloads.start()
+        }
     }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(container.workerFactory).build()
 }

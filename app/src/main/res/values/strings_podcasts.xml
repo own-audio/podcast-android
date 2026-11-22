@@ -137,7 +137,6 @@
     <string name="feed_placeholder" translatable="false">https://example.com/feed.xml</string>
     <string name="apple_podcasts" translatable="false">Apple Podcasts</string>
     <!-- Settings (P9) -->
-    <string name="downloads_offline_footer">Offline Mode shows and plays only what is on this device, as the app does on its own with no network.</string>
     <string name="playback">Playback</string>
     <string name="skip_back">Skip Back</string>
     <string name="skip_forward">Skip Forward</string>
@@ -162,4 +161,40 @@
     <string name="sync_footer">This device\'s shows and positions are kept in step with the account, as every other app signed in to it does.</string>
     <string name="podfetch" translatable="false">podfetch</string>
     <string name="share_with_the_family">Share with the Family</string>
+    <!-- P8: downloads -->
+    <string name="downloading_title">Downloading %1$s</string>
+    <string name="downloading_episodes">Downloading episodes</string>
+    <string name="download_wifi_only">Download on Wi-Fi Only</string>
+    <string name="keep_at_most">Keep at Most</string>
+    <string name="no_limit">No Limit</string>
+    <string name="gb_count">%d GB</string>
+    <string name="downloads_settings_footer">Offline Mode shows and plays only what is on this device, as the app does on its own with no network. Over the limit, played episodes go first, then the ones not played for longest; never the one playing. A show can keep its own downloads in Show Settings.</string>
+    <string name="nothing_downloaded">Nothing Downloaded</string>
+    <string name="nothing_downloaded_text">Episodes you download appear here, with the source each came from, and play with no network.</string>
+    <string name="downloading">Downloading</string>
+    <plurals name="retry_failed">
+        <item quantity="one">Retry %d Failed</item>
+        <item quantity="other">Retry %d Failed</item>
+    </plurals>
+    <string name="remove_all_downloads">Remove All Downloads</string>
+    <string name="remove_all_downloads_question">Remove All Downloads?</string>
+    <string name="on_this_device_size">%s on this device.</string>
+    <string name="removed_server">Removed server</string>
+    <string name="downloading_progress">Downloading… %d%%</string>
+    <string name="downloading_percent">Downloading %d%%</string>
+    <string name="download_failed">Download failed</string>
+    <string name="download_failed_try_again">Download failed, try again</string>
+    <string name="cancel_download">Cancel Download</string>
+    <string name="try_download_again">Try the Download Again</string>
+    <string name="error_stream_only">This episode can\'t be downloaded: the server only streams it.</string>
+    <string name="error_no_file">The server did not send the file.</string>
+    <string name="error_not_on_device">This episode is not on this device. Download it, or turn Offline Mode off.</string>
+    <string name="download_new_episodes">Download New Episodes</string>
+    <string name="newest_n">Newest %d</string>
+    <string name="delete_when_played">Delete When Played</string>
+    <plurals name="episodes_count_title">
+        <item quantity="one">%d Episode</item>
+        <item quantity="other">%d Episodes</item>
+    </plurals>
+    <string name="show_downloads_footer">New episodes download on their own, the newest first; unplayed ones only. Settings decides whether this waits for Wi-Fi.</string>
 </resources>

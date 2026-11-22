@@ -10,6 +10,10 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import android.os.Bundle
+import audio.own.player.core.SkipCommands
 import audio.own.player.core.ArtworkBitmapLoader
 import audio.own.player.core.PlaybackSessionCallback
 import audio.own.podcastplayer.MainActivity
@@ -26,7 +30,7 @@ import kotlinx.coroutines.cancel
 
 /**
  * The media service: the notification, the lock screen, Bluetooth and the system's media
- * controls. It plays the app's one [EpisodePlayer]; the player lives with the process, so a
+ * controls. It plays the app's one [PodcastPlayer]; the player lives with the process, so a
  * service the system ends and starts again picks up the same episode.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -45,7 +49,7 @@ class PodcastService : MediaLibraryService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaLibrarySession.Builder(this, player.sessionPlayer, callback)
+        session = MediaLibrarySession.Builder(this, player.spoken.sessionPlayer, callback)
             .setSessionActivity(open)
             .setBitmapLoader(CacheBitmapLoader(ArtworkBitmapLoader(scope) { uri -> container.artwork.notificationBitmap(uri) }))
             .build()
@@ -81,9 +85,19 @@ class PodcastService : MediaLibraryService() {
             if (!base.isAccepted) return Futures.immediateFuture(base)
             val builder = MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(base.availableSessionCommands)
-                .setAvailablePlayerCommands(EpisodePlayer.withoutNeighbours(base.availablePlayerCommands))
+                .setAvailablePlayerCommands(PodcastPlayer.withoutNeighbours(base.availablePlayerCommands))
             base.mediaButtonPreferences?.let { builder.setMediaButtonPreferences(it) }
             return Futures.immediateFuture(builder.build())
+        }
+
+        /** Skips through the app's player, which keeps them inside the episode's real length. */
+        override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                SkipCommands.ACTION_SKIP_BACK -> podcasts.player.skipBack()
+                SkipCommands.ACTION_SKIP_FORWARD -> podcasts.player.skipForward()
+                else -> return super.onCustomCommand(session, controller, customCommand, args)
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
         // Android Auto's browsing comes in P11; until then the root is empty.

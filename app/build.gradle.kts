@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:strings"))
     implementation(project(":core:servers"))
+    implementation(project(":core:downloads"))
     implementation(project(":kit:ownaudio"))
     implementation(project(":kit:feed"))
     implementation(project(":library"))
@@ -63,6 +64,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.work.runtime)
 
     // Sign in with Google: only the play build has Google Play services.
     "playImplementation"(libs.androidx.credentials)
@@ -75,6 +77,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.turbine)
+    testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.androidx.media3.test.utils)
+    testImplementation(libs.androidx.media3.test.utils.robolectric)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)

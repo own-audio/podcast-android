@@ -38,6 +38,7 @@ import audio.own.podcastplayer.app.MemoryPreferences
 import audio.own.podcastplayer.app.PlaybackSettings
 import audio.own.podcastplayer.app.ServerExtras
 import audio.own.podcastplayer.app.UserFacingException
+import audio.own.podcastplayer.FakeDownloader
 import audio.own.podcastplayer.eventually
 import audio.own.podcastplayer.mainThread
 import audio.own.podcastplayer.servers.ConnectionState
@@ -50,6 +51,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import audio.own.podcast.library.SourcedEpisode
+import audio.own.podcastplayer.playback.PodcastPlayer
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -118,6 +121,11 @@ private fun ownAudio(visibility: String = "private") = Stub { request ->
         "PUT" to "/api/v2/podcasts/p1/visibility" -> json(request.body?.utf8() ?: "{}")
         "PATCH" to "/api/v2/me/settings" -> json("""{"playback":{"speed":1.5}}""")
         "GET" to "/api/v2/me/podcasts/unplayed" -> json("""{"items":[]}""")
+        "PUT" to "/api/v2/me/progress/episode/e1" -> {
+            val position = Regex("\"position_ms\":(\\d+)").find(request.body?.utf8().orEmpty())?.groupValues?.get(1) ?: "0"
+            val at = Regex("\"at\":\"([^\"]+)\"").find(request.body?.utf8().orEmpty())?.groupValues?.get(1) ?: "2026-11-21T10:00:00Z"
+            json("""{"progress":{"kind":"episode","id":"e1","position_ms":$position,"finished":false,"updated_at":"$at"},"applied":true}""")
+        }
         else -> status(404)
     }
 }
@@ -172,7 +180,7 @@ class ServerSourcesTest {
     private val stubs = mutableListOf<AutoCloseable>()
     private val preferences = MemoryPreferences()
     private val network = MutableStateFlow(NetworkState(connected = true, metered = false, dataSaver = false, signature = "wifi"))
-    private val forgotten = mutableListOf<String>()
+    private val downloads = FakeDownloader()
     private val synced = mutableListOf<String>()
     private val libraries = mutableMapOf<String, List<ServerLibraryRef>>()
     private val absExpiry = Instant.parse("2026-11-21T11:00:00Z").toEpochMilli()
@@ -273,7 +281,8 @@ class ServerSourcesTest {
                     this@ServerSourcesTest.libraries[serverId] = libraries
                 }
             },
-            forgetLink = { forgotten += it },
+            downloads = downloads,
+
             syncDelayMs = 50,
         )
     }
@@ -354,21 +363,68 @@ class ServerSourcesTest {
         assertEquals("${server.url}/api/items/show1/file/101?token=tok", link.url)
         assertEquals("the link lives as long as its token", absExpiry, link.expiresAtMs)
 
-        engine.listener!!.onRefused(id, link.url)
-        runBlocking { eventually { engine.retries == 1 } }
-        assertEquals("the held link is dropped", listOf(id), forgotten)
-        assertEquals(1, server.count("POST", "/auth/refresh"))
-        val renewed = onMain { model.linkResolver.resolve(PlaybackLinkRequest(id)) }
-        assertTrue(renewed.url.endsWith("token=fresh"))
+        engine.listener!!.onLinkFailed(id, "https://elsewhere.example/a.mp3", 404)
+        onMain { model.linkResolver.resolve(PlaybackLinkRequest(id)) }
+        assertEquals("only a 401 renews the token", 0, server.count("POST", "/auth/refresh"))
 
-        engine.listener!!.onRefused(id, renewed.url)
-        runBlocking { eventually { model.state.value.error != null } }
-        assertEquals("a second refusal is an error", UiTextOf(R.string.error_cant_play), model.state.value.error)
-        assertEquals(1, engine.retries)
+        // The player asks once more right after telling: that link carries a new token.
+        engine.listener!!.onLinkFailed(id, link.url, 401)
+        val renewed = onMain { model.linkResolver.resolve(PlaybackLinkRequest(id)) }
+        assertEquals(1, server.count("POST", "/auth/refresh"))
+        assertTrue(renewed.url.endsWith("token=fresh"))
+        onMain { model.linkResolver.resolve(PlaybackLinkRequest(id)) }
+        assertEquals("renewed once, not at every link", 1, server.count("POST", "/auth/refresh"))
+    }
+
+    @Test
+    fun `a position left paused is put once, not again each time the app goes to the background`() {
+        val server = ownAudio().kept()
+        val engine = FakeEngine()
+        val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url)))), engine)
+        onMain { model.load() }
+        runBlocking { eventually { model.state.value.shows.any { it.show.title == "Server Show" } } }
+        val item = SourcedEpisode(SourceRef.Server(UUID.fromString(oaId)), audio.own.podcast.library.Episode(id = "e1", showId = "p1", title = "One"))
+        onMain { model.play(item, startAt = 0) }
+        engine.report(PodcastPlayer.Reason.PAUSE, 60_000, time)
+        val put = "/api/v2/me/progress/episode/e1"
+        runBlocking { eventually { server.count("PUT", put) == 1 } }
+        val pending = PendingProgress(RoomValueStore(db, "pending", ListSerializer(PendingProgress.Entry.serializer())))
+        // Cleared once the server answered: nothing is left for a refresh to send again.
+        runBlocking { eventually { runBlocking { pending.all() }.isEmpty() } }
+
+        repeat(3) {
+            onMain {
+                model.setForeground(true)
+                model.setForeground(false)
+                model.refresh(asked = true)
+            }
+        }
+        Thread.sleep(300)
+        assertEquals("the same position, not sent again at each trip to the background or refresh", 1, server.count("PUT", put))
+
+        // Moved on since (held back by the once-a-minute throttle): sent at the next trip.
+        time = time.plusSeconds(10)
+        engine.report(PodcastPlayer.Reason.PERIODIC, 70_000, time)
+        onMain {
+            model.setForeground(true)
+            model.setForeground(false)
+        }
+        runBlocking { eventually { server.count("PUT", put) == 2 } }
+    }
+
+    @Test
+    fun `a removed server's downloads leave with it`() {
+        val server = ownAudio().kept()
+        val state = MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url))))
+        val model = model(state)
+        onMain { model.load() }
+        state.update { it.copy(servers = emptyList()) }
+        runBlocking { eventually { "removeAll $oaId" in downloads.calls } }
     }
 
     @Test
     fun `a gPodder account syncs on refresh and shortly after a follow on the device`() {
+
         val gpodder = GPodder().kept()
         val model = model(MutableStateFlow(ServersState(loaded = true, servers = listOf(gpodderRecord(gpodder.stub.url)))))
         onMain { model.load() }
