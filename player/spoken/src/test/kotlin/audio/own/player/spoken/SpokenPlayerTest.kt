@@ -55,7 +55,7 @@ class SpokenPlayerTest {
             SpokenPart("f2", Uri.fromFile(fixture("test-book.m4b")).toString(), 6_000),
         )
         exo = TestExoPlayerBuilder(context).build()
-        spoken = SpokenPlayer(exo, scope, openPart = { BlockCachingRangeReader(FileRangeReader(File(Uri.parse(it.uri).path!!))) }, now = { clock })
+        spoken = SpokenPlayer(exo, scope, idleReleaseMs = null, openPart = { BlockCachingRangeReader(FileRangeReader(File(Uri.parse(it.uri).path!!))) }, now = { clock })
         spoken.onPosition = { reports += it }
     }
 
@@ -277,7 +277,7 @@ class SpokenPlayerTest {
     fun `the look-ahead load control plays a book across its files`() {
         val control = audio.own.player.spoken.media.LookAheadLoadControl(lookAheadMs = 5 * 60_000L)
         val player = TestExoPlayerBuilder(context).setLoadControl(control).build()
-        val withWindow = SpokenPlayer(player, scope, now = { clock })
+        val withWindow = SpokenPlayer(player, scope, idleReleaseMs = null, now = { clock })
         withWindow.load(book(), 5_000, autoplay = true)
         advance(player).untilPosition(1, 500)
         assertTrue(withWindow.positionMs() in 6_400..7_000)

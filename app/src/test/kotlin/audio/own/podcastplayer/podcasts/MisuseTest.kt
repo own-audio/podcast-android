@@ -297,7 +297,7 @@ class MisuseTest {
         closing += { file.delete() }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val exo: ExoPlayer = TestExoPlayerBuilder(context).build()
-        val player = PodcastPlayer(context, SpokenPlayer(exo, scope), scope, service = null)
+        val player = PodcastPlayer(context, SpokenPlayer(exo, scope, idleReleaseMs = null), scope, service = null)
         closing += { player.spoken.release(); scope.cancel() }
         player.localFile = { Uri.fromFile(file) }
         val item = SourcedEpisode(SourceRef.Phone, audio.own.podcast.library.Episode(id = "e1", showId = "s1", title = "Episode", durationMs = 6_000))

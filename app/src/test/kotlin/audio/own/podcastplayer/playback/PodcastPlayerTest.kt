@@ -63,7 +63,7 @@ class PodcastPlayerTest {
     fun setUp() {
         file = File(folder.root, "e.mp3").apply { writeBytes(File("src/test/resources/fixtures/chapters-id3v24.mp3").readBytes()) }
         exo = TestExoPlayerBuilder(context).build()
-        val spoken = SpokenPlayer(exo, scope, openPart = { part -> Uri.parse(part.uri).path?.let { BlockCachingRangeReader(FileRangeReader(File(it))) } })
+        val spoken = SpokenPlayer(exo, scope, idleReleaseMs = null, openPart = { part -> Uri.parse(part.uri).path?.let { BlockCachingRangeReader(FileRangeReader(File(it))) } })
         player = PodcastPlayer(context, spoken, scope, service = null)
         // Every episode is "downloaded" here: the player opens the file.
         player.localFile = { Uri.fromFile(file) }

@@ -48,7 +48,7 @@ class SpokenPlayerUpdatesTest {
     @Before
     fun setUp() {
         exo = TestExoPlayerBuilder(context).build()
-        spoken = SpokenPlayer(exo, scope, now = { clock })
+        spoken = SpokenPlayer(exo, scope, idleReleaseMs = null, now = { clock })
         spoken.onPosition = { reports += it }
     }
 

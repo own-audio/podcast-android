@@ -59,6 +59,12 @@ class SpokenPlayer(
     /** The look-ahead window, to read and change "Keep Ahead". */
     val loadControl: LookAheadLoadControl? = null,
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * How long a pause holds the decoder; null never releases it. Tests turn it off: Robolectric
+     * runs a delayed task as soon as the main looper is otherwise idle, so the release would stop
+     * a paused player that a test is waiting on.
+     */
+    idleReleaseMs: Long? = IdleDecoderRelease.DEFAULT_DELAY_MS,
 ) {
     data class State(
         val book: SpokenBook? = null,
@@ -110,7 +116,7 @@ class SpokenPlayer(
     private val sleepPolicy = SpokenSleepPolicy()
 
     private val focus = AudioFocusOnFirstPlay(PlayerSetup.audioAttributes(ContentKind.SPEECH))
-    private val idleRelease = IdleDecoderRelease(player)
+    private val idleRelease = idleReleaseMs?.let { IdleDecoderRelease(player, it) }
 
     private var book: SpokenBook? = null
     private var timeline: BookTimeline? = null
@@ -367,7 +373,7 @@ class SpokenPlayer(
 
     fun release() {
         stop()
-        idleRelease.dispose()
+        idleRelease?.dispose()
         tickJob?.cancel()
         player.release()
     }

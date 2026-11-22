@@ -47,7 +47,7 @@ class SignalWaitTest {
         val sources = PlaybackDataSources(context, resolver, OkHttpClient(), cache = null)
         val policy = SignalWaitPolicy { connected }
         val exo = TestExoPlayerBuilder(context).setMediaSourceFactory(SpokenMediaSourceFactory(context, sources, policy)).build()
-        val spoken = SpokenPlayer(exo, scope, links = sources.links)
+        val spoken = SpokenPlayer(exo, scope, idleReleaseMs = null, links = sources.links)
         connected = false
         spoken.networkChanged(false)
         val part = SpokenPart("f1", PlaybackUris.forItem("srv|b1", "f1").toString(), 60_000)
@@ -84,7 +84,7 @@ class SignalWaitTest {
         val resolver = PlaybackLinkResolver { resolved++; PlaybackLink(server.url("/book.mp3").toString()) }
         val sources = PlaybackDataSources(context, resolver, OkHttpClient(), cache = null)
         val exo = TestExoPlayerBuilder(context).setMediaSourceFactory(SpokenMediaSourceFactory(context, sources, SignalWaitPolicy { true })).build()
-        val spoken = SpokenPlayer(exo, scope, links = sources.links)
+        val spoken = SpokenPlayer(exo, scope, idleReleaseMs = null, links = sources.links)
         var failed = 0
         spoken.onLinkFailed = { _, _ -> failed++ }
         val part = SpokenPart("f1", PlaybackUris.forItem("srv|b1", "f1").toString(), 60_000)
