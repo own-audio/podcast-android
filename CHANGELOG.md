@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- The spoken player takes a part's real length from the file when the stated one is missing or wrong, accepts chapters that arrive after loading, and switches to a downloaded copy at the next pause or seek without losing the place.
 - P10 and P11: Summary and Ask on own.audio episodes with a transcript (hosted servers); Android Auto (New Episodes, Downloads, Shows, a Chapters folder, a Speed button, search); voice ("continue listening", "play ‹show›"); the Up Next widget; a Continue Listening shortcut; ownpodcast://play links; an hourly refresh in the background.
 - `:kit:ownaudio` from music-android: narration starts can carry an Idempotency-Key.
 - P8: downloads — your own at once, those of a show's rules (Download New Episodes, Delete When Played, Keep at Most) when Wi-Fi and the battery allow; the Downloads tab; the storage limit; downloads play first and offline lists grey out the rest. The player is now the shared spoken player. A paused episode's position is no longer sent again every time the app goes to the background.

@@ -97,4 +97,37 @@ class BookTimelineTest {
         assertFalse(parts[0].isUnresolved)
         assertFalse(SpokenPart("h", "https://x/h.m3u8", 1, isHls = true, streamsByRange = true).isWindowable)
     }
+
+    @Test
+    fun `a middle part's real length moves the parts and chapters after it`() {
+        // b is 2.5 s, not 2 s: Two, which spans a and b, grows; Three moves.
+        val longer = timeline.withPartDuration(1, 2_500)
+        assertEquals(listOf(0L, 1_000L, 3_500L), longer.starts)
+        assertEquals(4_000L, longer.durationMs)
+        assertEquals(
+            listOf(SpokenChapter("One", 0, 1_500), SpokenChapter("Two", 1_500, 3_500), SpokenChapter("Three", 3_500, 4_000)),
+            longer.chapters,
+        )
+        // b is 0.4 s: Two now ends with it.
+        val shorter = timeline.withPartDuration(1, 400)
+        assertEquals(1_900L, shorter.durationMs)
+        assertEquals(
+            listOf(SpokenChapter("One", 0, 1_400), SpokenChapter("Two", 1_400, 1_400), SpokenChapter("Three", 1_400, 1_900)),
+            shorter.chapters,
+        )
+        assertEquals(timeline, timeline.withPartDuration(9, 1))
+    }
+
+    @Test
+    fun `a last part of unknown length holds no position to the book's end`() {
+        val open = BookTimeline(listOf(SpokenPart("e", "file:///e", 0)), listOf(SpokenChapter("Intro", 0, 60_000), SpokenChapter("Talk", 60_000, 0)))
+        assertTrue(open.isOpenEnded)
+        assertEquals(PartPosition(0, 90_000), open.locate(90_000))
+        assertEquals(60_000L, open.endOfChapter(30_000))
+        assertEquals(Long.MAX_VALUE, open.endOfChapter(90_000))
+        val known = open.withPartDuration(0, 120_000)
+        assertFalse(known.isOpenEnded)
+        assertEquals(listOf(SpokenChapter("Intro", 0, 60_000), SpokenChapter("Talk", 60_000, 120_000)), known.chapters)
+        assertEquals(PartPosition(0, 120_000), known.locate(200_000))
+    }
 }

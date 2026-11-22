@@ -87,6 +87,12 @@ class SpokenPlayer(
     var smartRewind: SmartRewind = SmartRewind()
     var tickIntervalMs: Long = 10_000
 
+    /**
+     * Whether a stated part length more than [DURATION_TOLERANCE_MS] off the file's real one gives
+     * way to it once the player knows it. A missing length (0) always does.
+     */
+    var adoptsPlayerDurations: Boolean = true
+
     /** Whether whole parts may be fetched ahead (an unmetered network, no Data Saver). */
     var canPrefetchWhole: () -> Boolean = { false }
 
@@ -124,6 +130,9 @@ class SpokenPlayer(
     private var lastSavedAheadAt = 0L
     private var savedAheadMs: Long? = null
 
+    /** Parts whose local copy waits for the next pause or seek: the part playing, mid-sentence. */
+    private val localWaiting = HashMap<Int, String>()
+
     // Waiting for a signal.
     private var connected = true
     private var waitingSince: Long? = null
@@ -157,6 +166,7 @@ class SpokenPlayer(
         listenedInPartMs = 0
         playingSince = null
         savedAheadMs = null
+        localWaiting.clear()
         resetWait()
         sleepPolicy.disarm()
         val serverChapters = book.serverChapters
@@ -179,12 +189,103 @@ class SpokenPlayer(
         chapterJob = scope.launch {
             val found = EmbeddedChapters.readWithinLimit(book.parts, open, chapterTitle)
             if (found.isEmpty() || this@SpokenPlayer.book?.id != book.id) return@launch
-            timeline = BookTimeline(book.parts, found)
+            // Lengths the player told meanwhile move the marks of the parts after them.
+            val current = timeline?.parts ?: book.parts
+            var line = BookTimeline(book.parts, found)
+            for (i in current.indices) {
+                if (i < line.parts.size && current[i].durationMs != line.parts[i].durationMs) line = line.withPartDuration(i, current[i].durationMs)
+            }
+            timeline = BookTimeline(current, line.chapters)
             chapterOrigin = ChapterOrigin.FILES
             commandsChanged()
             updateChapterMetadata()
             publish()
         }
+    }
+
+    /**
+     * Replaces the chapters of the book loaded now (a feed's chapters that arrived after it
+     * started): next and previous, End of Chapter and the session go by them from now on. Empty
+     * goes back to one chapter per part. File chapters still being read are no longer awaited.
+     */
+    fun setChapters(chapters: List<SpokenChapter>) {
+        val book = book ?: return
+        val line = timeline ?: return
+        chapterJob?.cancel()
+        if (chapters.isEmpty()) {
+            chapterOrigin = ChapterOrigin.PARTS
+            timeline = BookTimeline(line.parts, BookTimeline.chaptersFromParts(line.parts, book.partTitles, partTitle))
+        } else {
+            chapterOrigin = ChapterOrigin.SERVER
+            timeline = line.withChapters(chapters)
+        }
+        this.book = book.copy(serverChapters = chapters)
+        commandsChanged()
+        updateChapterMetadata()
+        publish()
+    }
+
+    /**
+     * Part [partIndex] is on the phone now, at [uri] (a download finished). A part not playing
+     * plays from it at once; the part playing moves to it at the next pause or seek, never
+     * mid-sentence, at the same place. Waiting for a signal for that part, the copy ends the wait.
+     */
+    fun useLocalCopy(partIndex: Int, uri: String) {
+        val book = book ?: return
+        val line = timeline ?: return
+        val part = line.parts.getOrNull(partIndex) ?: return
+        if (part.uri == uri) return
+        val local = part.copy(uri = uri, isHls = false)
+        timeline = line.withPart(partIndex, local)
+        this.book = book.copy(parts = timeline?.parts ?: book.parts)
+        prefetcher?.cancel()
+        if (partIndex != player.currentMediaItemIndex) {
+            swapSource(partIndex, uri)
+        } else if (waitingSince != null) {
+            localWaiting[partIndex] = uri
+            val resume = resumesAfterWait
+            val position = positionMs()
+            resetWait()
+            error = null
+            retriedLink = false
+            swapWaiting()
+            if (player.playbackState == Player.STATE_IDLE) player.prepare()
+            seek(position, report = false)
+            if (resume) {
+                focus.beforePlay(player)
+                player.play()
+            }
+        } else if (player.playWhenReady) {
+            localWaiting[partIndex] = uri
+        } else {
+            localWaiting[partIndex] = uri
+            swapWaiting()
+        }
+        publish()
+    }
+
+    /** [useLocalCopy] for the part with [partId]. */
+    fun useLocalCopy(partId: String, uri: String) {
+        val index = timeline?.indexOfPart(partId) ?: return
+        useLocalCopy(index, uri)
+    }
+
+    /** The copies waiting for a break: the part playing goes back to where it was. */
+    private fun swapWaiting() {
+        if (localWaiting.isEmpty() || finished) return
+        val waiting = localWaiting.toMap()
+        localWaiting.clear()
+        val current = player.currentMediaItemIndex
+        val at = player.currentPosition.coerceAtLeast(0)
+        for ((index, uri) in waiting) swapSource(index, uri)
+        if (current in waiting) player.seekTo(current, at)
+    }
+
+    private fun swapSource(index: Int, uri: String) {
+        if (index !in 0 until player.mediaItemCount) return
+        val item = player.getMediaItemAt(index)
+        if (item.localConfiguration?.uri?.toString() == uri) return
+        player.replaceMediaItem(index, item.buildUpon().setUri(uri).setMimeType(null).build())
     }
 
     fun play() {
@@ -228,6 +329,7 @@ class SpokenPlayer(
         player.pause()
         pausedAt = now()
         report(ReportReason.PAUSE)
+        swapWaiting()
         publish()
     }
 
@@ -251,6 +353,7 @@ class SpokenPlayer(
         sleepTimer.cancel()
         sleepPolicy.disarm()
         savedAheadMs = null
+        localWaiting.clear()
         publish()
     }
 
@@ -287,6 +390,11 @@ class SpokenPlayer(
         val chapterBefore = line.chapterIndex(positionMs())
         if (located.index != player.currentMediaItemIndex) listenedInPartMs = 0
         finished = false
+        // A seek breaks the sentence anyway: a copy that arrived meanwhile is taken now.
+        if (localWaiting.isNotEmpty()) {
+            localWaiting.forEach { (index, uri) -> swapSource(index, uri) }
+            localWaiting.clear()
+        }
         player.seekTo(located.index, located.offsetMs)
         lastTickPositionMs = clamped
         if (report) report(if (line.chapterIndex(clamped) != chapterBefore) ReportReason.CHAPTER else ReportReason.SEEK)
@@ -598,9 +706,11 @@ class SpokenPlayer(
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-            if (playWhenReady) startTicking()
+            if (playWhenReady) startTicking() else if (localWaiting.isNotEmpty()) scope.launch { if (!player.playWhenReady) swapWaiting() }
             publish()
         }
+
+        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) = adoptDurations(timeline)
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
@@ -615,6 +725,9 @@ class SpokenPlayer(
             val line = timeline ?: return
             listenedInPartMs = 0
             retriedLink = false
+            // A copy that waited for the part to end plays when its part comes round again.
+            val current = player.currentMediaItemIndex
+            localWaiting.keys.filter { it != current }.forEach { index -> localWaiting.remove(index)?.let { swapSource(index, it) } }
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                 val ended = player.currentMediaItemIndex - 1
                 if (ended >= 0 && sleepPolicy.onPartEnded(line, ended) == SleepDecision.PAUSE) pause()
@@ -627,6 +740,11 @@ class SpokenPlayer(
             val line = timeline ?: return
             val part = line.parts.getOrNull(player.currentMediaItemIndex)
             when {
+                // The copy on the phone that waited for a break replaces the link that failed.
+                player.currentMediaItemIndex in localWaiting -> {
+                    swapWaiting()
+                    player.prepare()
+                }
                 !connected -> startWaiting(failed = true)
                 !retriedLink && part != null -> {
                     retriedLink = true
@@ -646,6 +764,35 @@ class SpokenPlayer(
             }
             publish()
         }
+    }
+
+    /**
+     * The player opened a part and knows its real length: where the stated one is missing or
+     * wrong (a feed's guess, an inserted ad) the book's timeline takes it, with its chapters.
+     */
+    private fun adoptDurations(media: androidx.media3.common.Timeline) {
+        var line = timeline ?: return
+        val book = book ?: return
+        if (media.windowCount != line.parts.size) return
+        val window = androidx.media3.common.Timeline.Window()
+        var changed = false
+        for (i in 0 until media.windowCount) {
+            media.getWindow(i, window)
+            if (window.isPlaceholder || window.isDynamic) continue
+            val real = window.durationMs
+            if (real == C.TIME_UNSET || real <= 0) continue
+            val stated = line.parts[i].durationMs
+            if (stated > 0 && (!adoptsPlayerDurations || kotlin.math.abs(real - stated) <= DURATION_TOLERANCE_MS)) continue
+            line = line.withPartDuration(i, real)
+            changed = true
+        }
+        if (!changed) return
+        if (chapterOrigin == ChapterOrigin.PARTS) line = BookTimeline(line.parts, BookTimeline.chaptersFromParts(line.parts, book.partTitles, partTitle))
+        timeline = line
+        this.book = book.copy(parts = line.parts)
+        lastTickPositionMs = positionMs()
+        commandsChanged()
+        publish()
     }
 
     private fun bookEnded() {
@@ -780,6 +927,9 @@ class SpokenPlayer(
             .also { PlayerSetup.configure(it, ContentKind.SPEECH) }
 
         private const val TICK_MS = 250L
+
+        /** A stated length this close to the player's is kept, so book time doesn't shift for nothing. */
+        const val DURATION_TOLERANCE_MS = 1_000L
 
         private val CHAPTER_COMMANDS = listOf(
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
