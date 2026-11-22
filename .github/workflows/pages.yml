@@ -2,10 +2,9 @@ name: Guide
 
 # Publishes guide/ (the user guide) to GitHub Pages. Only guide/ is built: docs/ holds plans and
 # notes for developers, not pages for users.
+# Run by hand until GitHub Pages is switched on for the repository (Settings → Pages → Source:
+# GitHub Actions); then add back `push: branches: [main], paths: [guide/**]` to publish on change.
 on:
-  push:
-    branches: [main]
-    paths: [guide/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:

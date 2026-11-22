@@ -563,7 +563,8 @@ class ServerSourcesTest {
             fail("a dead server can't sync")
         } catch (_: UserFacingException) {
         }
-        assertTrue("nothing left marked as syncing", model.state.value.syncing.isEmpty())
+        // The follow also scheduled a background sync with the same dead server; it ends on its own.
+        runBlocking { eventually(timeoutMs = 30_000) { model.state.value.syncing.isEmpty() } }
     }
 
     @Test
