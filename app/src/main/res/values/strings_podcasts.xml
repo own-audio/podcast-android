@@ -156,6 +156,7 @@
     <string name="error_mobile_data">On mobile data only downloaded episodes play. You can change this in Settings.</string>
     <!-- Audiobookshelf and gPodder -->
     <string name="error_no_podcast_library">This account has no podcast library on the server.</string>
+    <string name="error_already_added">This server is already added. To sign in again, open it in Settings.</string>
     <string name="error_podfetch_admin">The server refuses this account for syncing. On podfetch the admin account can\'t sync: add a separate user there and sign in with it.</string>
     <string name="libraries">Libraries</string>
     <string name="libraries_footer">The podcast libraries on this server. A library you turn off leaves New Episodes, Shows and the switch; with more than one, each is in the switch on its own.</string>

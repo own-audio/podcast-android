@@ -191,6 +191,25 @@ class OtherServersTest {
     }
 
     @Test
+    fun anAudiobookshelfAccountAddedAgainIsRefused() = runBlocking {
+        val abs = audiobookshelf(podcastLibraries).kept()
+        model.signIn(abs.url, "alex", "right", "")
+        // The address typed differently: upper case, a trailing slash.
+        expectMessage(AppR.string.error_already_added) { model.signIn(abs.url.uppercase() + "/", " Alex ", "right", "Again") }
+        assertEquals(1, harness.store.loadAll().size)
+        assertEquals("refused before signing in", 1, abs.requests.count { it.url.encodedPath == "/login" })
+    }
+
+    @Test
+    fun aGPodderAccountAddedAgainIsRefused() = runBlocking {
+        val podfetch = Podfetch().kept()
+        model.signIn(podfetch.fake.url, "alex", "right", "")
+        expectMessage(AppR.string.error_already_added) { model.signIn(podfetch.fake.url + "/", "ALEX", "right", "", kind = ServerKinds.GPODDER) }
+        assertEquals(1, harness.store.loadAll().size)
+        assertEquals(1, podfetch.devices.size)
+    }
+
+    @Test
     fun librariesHideAndRemovingForgetsWhatWasKept() = runBlocking {
         val abs = audiobookshelf(podcastLibraries).kept()
         model.signIn(abs.url, "alex", "right", "")

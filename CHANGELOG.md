@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- Adding an account the app already has (the same server and the same user) is refused with "This server is already added. To sign in again, open it in Settings."; another user on the same server can still be added.
 - The user guide (`guide/`, for GitHub Pages): every screen, with screenshots.
 - A book or episode loaded to be shown paused no longer starts playing by itself after the previous one played (the shared spoken player).
 - P12: TalkBack headings and labels, layouts that stack at the largest text, tablets in landscape with a navigation rail, keyboard keys (Space, Ctrl+←/→, Esc), misuse tests against a local feed server. The player shows "N min saved" again, takes chapters that arrive after Play, and switches to a finished download in place. An episode loaded after Stop no longer starts by itself.

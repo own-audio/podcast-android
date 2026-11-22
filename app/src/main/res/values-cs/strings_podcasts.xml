@@ -158,6 +158,7 @@
     <string name="error_mobile_data">Na mobilních datech se přehrávají jen stažené epizody. Změnit to můžete v Nastavení.</string>
     <!-- Audiobookshelf and gPodder -->
     <string name="error_no_podcast_library">Tento účet nemá na serveru žádnou podcastovou knihovnu.</string>
+    <string name="error_already_added">Tento server už je přidaný. Znovu se přihlásíte v Nastavení na jeho stránce.</string>
     <string name="error_podfetch_admin">Server tento účet k synchronizaci nepustí. Na podfetch se správcovský účet synchronizovat nemůže: přidejte tam samostatného uživatele a přihlaste se jím.</string>
     <string name="libraries">Knihovny</string>
     <string name="libraries_footer">Podcastové knihovny na tomto serveru. Vypnutá knihovna zmizí z nových epizod, pořadů i přepínače; je-li jich víc, má každá v přepínači vlastní položku.</string>

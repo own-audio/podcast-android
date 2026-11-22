@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -272,7 +273,10 @@ class ServersModel(
      * and throws [TwoFactorNeeded].
      */
     suspend fun signIn(address: String, username: String, password: String, name: String, replacing: String? = null, kind: String? = null) {
-        when (val found = detector.detect(address, kind)) {
+        val found = detector.detect(address, kind)
+        // Refused before signing in, so the server gets no session and asks for no code.
+        if (replacing == null) refuseIfAdded(found.kind, found.host, (found as? Detected.OwnAudio)?.discovery?.id, username)
+        when (found) {
             is Detected.Audiobookshelf -> finishAudiobookshelf(found.host, username, password, name, replacing)
             is Detected.GPodder -> finishGPodder(found.host, found.software, username, password, name, replacing)
             is Detected.OwnAudio -> {
@@ -411,7 +415,7 @@ class ServersModel(
             userId = me.id,
             addedAtEpochMs = clock.millis(),
         ).learning(learned)
-        saveSignedIn(record, null, replacing)
+        saveSignedIn(record, null, replacing) { probe.signOut() }
     }
 
     /**
@@ -483,8 +487,19 @@ class ServersModel(
     /** This install's device on gPodder accounts: the same on every account, for the life of the install. */
     suspend fun gpodderDevice(): String = "own-audio-podcasts-" + preferences.installId().replace("-", "").take(8)
 
-    /** Saves a newly signed-in server, or puts the sign-in on the saved one it replaces. */
-    private suspend fun saveSignedIn(record: ServerRecord, extras: ServerExtras?, replacing: String?) {
+    /**
+     * Saves a newly signed-in server, or puts the sign-in on the saved one it replaces. A new one
+     * the app already has is refused, and [abandon] ends the session the sign-in started.
+     */
+    private suspend fun saveSignedIn(record: ServerRecord, extras: ServerExtras?, replacing: String?, abandon: suspend () -> Unit = {}) {
+        if (replacing == null) {
+            try {
+                refuseIfAdded(record.kind, record.host, record.serverIdentity, record.auth.userName)
+            } catch (e: UserFacingException) {
+                scope.launch { runCatching { abandon() } }
+                throw e
+            }
+        }
         if (replacing != null) {
             replaceSignIn(replacing, record)
             if (extras != null) {
@@ -502,6 +517,25 @@ class ServersModel(
             scope.launch { chooseAddress(record.id) }
         }
         _signedIn.tryEmit(replacing ?: record.id)
+    }
+
+    /**
+     * Refuses a second copy of an account the app has: the same kind, the same server (its
+     * identity, or its address for a kind without one) and the same user. Another user on that
+     * server is allowed; signing in again goes through the saved server's page.
+     */
+    private fun refuseIfAdded(kind: String, host: String, identity: String?, userName: String) {
+        val user = userName.trim()
+        val added = _state.value.servers.any { saved ->
+            saved.kind == kind &&
+                saved.auth.userName.trim().equals(user, ignoreCase = true) &&
+                if (saved.serverIdentity != null && identity != null) {
+                    saved.serverIdentity == identity
+                } else {
+                    (listOf(saved.host) + saved.addresses.map { it.url }).any { addressKey(it) == addressKey(host) }
+                }
+        }
+        if (added) throw UserFacingException(AppR.string.error_already_added)
     }
 
     /** Signs in to a saved server again; it keeps its id, so downloads and addresses stay. */
@@ -797,6 +831,25 @@ internal fun audio.own.kit.audiobookshelf.Tokens.toStored() =
 
 internal fun StoredTokens.toAbsTokens() =
     audio.own.kit.audiobookshelf.Tokens(access, refresh, expiresAtEpochMs ?: audio.own.kit.audiobookshelf.Tokens.NEVER)
+
+/** The server kind of what was found at an address. */
+internal val Detected.kind: String
+    get() = when (this) {
+        is Detected.OwnAudio -> ServerKinds.OWN_AUDIO
+        is Detected.Audiobookshelf -> ServerKinds.AUDIOBOOKSHELF
+        is Detected.GPodder -> ServerKinds.GPODDER
+    }
+
+/**
+ * What names a server in an address: its host, a port other than the scheme's own, and the path.
+ * The scheme, the host's case and a trailing slash don't count.
+ */
+internal fun addressKey(address: String): String {
+    val typed = address.trim()
+    val url = (if ("://" in typed) typed else "http://$typed").toHttpUrlOrNull() ?: return typed.trimEnd('/').lowercase()
+    val port = if (url.port == HttpUrl.defaultPort(url.scheme)) "" else ":${url.port}"
+    return url.host + port + url.encodedPath.trimEnd('/')
+}
 
 /** What the listener is told when a gPodder server refuses. */
 internal fun gpodderProblem(e: GPodderException): UserFacingException = UserFacingException(
