@@ -97,6 +97,16 @@ class SpokenPlayerTest {
     }
 
     @Test
+    fun `a book loaded paused after one that played stays paused`() {
+        spoken.load(book(), 0, autoplay = true)
+        ready()
+        assertTrue(exo.playWhenReady)
+        spoken.load(book(), 1_000, autoplay = false)
+        ready()
+        assertFalse("loaded to be shown, not played", exo.playWhenReady)
+    }
+
+    @Test
     fun `skips cross file boundaries and stop at the ends`() {
         spoken.skipBackSecs = 5
         spoken.load(book(), 7_000, autoplay = false)

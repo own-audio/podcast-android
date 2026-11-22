@@ -177,6 +177,9 @@ class SpokenPlayer(
         lastTickPositionMs = line.position(start.index, start.offsetMs)
         player.setMediaItems(book.parts.mapIndexed { i, part -> mediaItem(book, part, i) }, start.index, start.offsetMs)
         player.playbackParameters = PlaybackParameters(PlaybackSpeed.normalized(speed), 1f)
+        // ExoPlayer keeps playWhenReady across stop() and a new playlist: without this, a book loaded
+        // to be shown paused (after Stop, or the last book at launch) would start by itself.
+        if (!autoplay) player.playWhenReady = false
         player.prepare()
         lastReportAt = now()
         if (autoplay) play()
