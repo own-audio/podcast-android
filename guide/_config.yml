@@ -1,0 +1,18 @@
+title: own.audio Podcasts
+description: The user guide for own.audio Podcasts, the podcast player for Android.
+url: https://own-audio.github.io
+baseurl: /podcast-android
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+  - jekyll-sitemap
+  - jekyll-seo-tag
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+aux_links:
+  "App on GitHub": https://github.com/own-audio/podcast-android
+  "own.audio": https://www.own.audio
+webmaster_verifications:
+  bing: C06F8B281273F732DD51F2E38288A7C3
+  google: tCObu9ZgS_MAygkBfq3GBtEJIgTYWiw7m4MYqQBEtGA

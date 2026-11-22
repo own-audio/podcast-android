@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- The user guide (`guide/`, for GitHub Pages): every screen, with screenshots.
 - A book or episode loaded to be shown paused no longer starts playing by itself after the previous one played (the shared spoken player).
 - P12: TalkBack headings and labels, layouts that stack at the largest text, tablets in landscape with a navigation rail, keyboard keys (Space, Ctrl+←/→, Esc), misuse tests against a local feed server. The player shows "N min saved" again, takes chapters that arrive after Play, and switches to a finished download in place. An episode loaded after Stop no longer starts by itself.
 - The spoken player takes a part's real length from the file when the stated one is missing or wrong, accepts chapters that arrive after loading, and switches to a downloaded copy at the next pause or seek without losing the place.
