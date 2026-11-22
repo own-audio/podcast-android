@@ -207,8 +207,13 @@ class PodcastModelTest {
         runBlocking { eventually { model.state.value.inbox.none { it.id == e4.id } } }
         model.dismiss(model.state.value.inbox.first())
         assertEquals(listOf("e2"), model.state.value.inbox.map { it.episode.id })
-        onMain { model.reloadLists() }
-        assertEquals("both are written, not just hidden", listOf("e2"), model.state.value.inbox.map { it.episode.id })
+        // Both are written in the background: reading the lists again from storage must find them.
+        runBlocking {
+            eventually {
+                onMain { model.reloadLists() }
+                model.state.value.inbox.map { it.episode.id } == listOf("e2")
+            }
+        }
     }
 
     @Test
@@ -413,5 +418,60 @@ class PodcastModelTest {
         assertNull(onMain { model.phone.progress(EpisodeKey(show.show.id, "e2")) })
         runBlocking { eventually { lastPlayed.value == null } }
         assertFalse(model.state.value.inbox.any { it.episode.showId == show.show.id })
+    }
+
+    @Test
+    fun `continue listening goes on with the player, else the last played, else one under way, else the newest`() {
+        val (model, engine) = model()
+        onMain { model.load() }
+        assertFalse("nothing followed: nothing to play", onMain { model.continueListening() })
+        assertEquals(R.string.voice_nothing_to_play, model.state.value.error?.id)
+        document = feed("e1" to 1, "e2" to 2, "e3" to 3)
+        onMain { model.follow(FEED) }
+        time = time.plusSeconds(3600)
+        onMain { model.refresh(asked = true) }
+        val newest = model.state.value.inbox.first()
+        assertTrue(onMain { model.continueListening() })
+        assertEquals("the newest new episode", newest.id, engine.state.value.item?.id)
+
+        engine.pause()
+        assertTrue(onMain { model.continueListening() })
+        assertTrue("the one in the player plays on", engine.state.value.isPlaying)
+        assertEquals(newest.id, engine.state.value.item?.id)
+    }
+
+    @Test
+    fun `play a show from the assistant plays its newest unplayed episode, and links play the episode they name`() {
+        val (model, engine) = model()
+        onMain { model.load() }
+        document = feed("e1" to 1, "e2" to 2)
+        onMain { model.follow(FEED) }
+        assertTrue(onMain { model.playFromSearch("play Show on own.podcast") })
+        assertEquals("e2", engine.state.value.item?.episode?.id)
+        assertFalse(onMain { model.playFromSearch("a show nobody follows") })
+        assertEquals(R.string.voice_show_not_found, model.state.value.error?.id)
+
+        val e1 = SourcedEpisode.id(SourceRef.Phone, EpisodeKey(model.state.value.shows.first().show.id, "e1"))
+        assertTrue("an episode that is no longer in New Episodes comes from its source", onMain { model.playLink(e1) })
+        assertEquals(e1, engine.state.value.item?.id)
+        assertFalse(onMain { model.playLink("phone/nothing|here") })
+        assertEquals(R.string.error_episode_gone, model.state.value.error?.id)
+    }
+
+    @Test
+    fun `the background refresh only sends positions while an episode plays`() {
+        val (model, engine) = model()
+        onMain { model.load() }
+        document = feed("e1" to 1)
+        onMain { model.follow(FEED) }
+        time = time.plusSeconds(3600)
+        document = feed("e1" to 1, "e2" to 2)
+        onMain { model.play(model.state.value.inbox.first()) }
+        assertTrue(engine.state.value.isPlaying)
+        assertTrue(onMain { model.backgroundRefresh() })
+        assertEquals("nothing fetched while playing", listOf("e1"), model.state.value.inbox.map { it.episode.id })
+        engine.pause()
+        assertTrue(onMain { model.backgroundRefresh() })
+        assertTrue(model.state.value.inbox.any { it.episode.id == "e2" })
     }
 }

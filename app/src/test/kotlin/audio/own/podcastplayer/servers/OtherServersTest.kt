@@ -195,16 +195,17 @@ class OtherServersTest {
         val abs = audiobookshelf(podcastLibraries).kept()
         model.signIn(abs.url, "alex", "right", "")
         val id = harness.store.loadAll().single().id
+        // The extras are saved in the background; each step waits until they are.
         model.setLibraryHidden(id, "lib2", hidden = true)
-        assertEquals(setOf("lib2"), model.state.value.extras(id).hiddenLibraries)
+        eventually { model.state.value.extras(id).hiddenLibraries == setOf("lib2") }
         assertEquals(setOf("lib2"), harness.preferences.serverExtras.first()[id]!!.hiddenLibraries)
         model.setLibraryHidden(id, "lib2", hidden = false)
-        assertTrue(model.state.value.extras(id).hiddenLibraries.isEmpty())
+        eventually { model.state.value.extras(id).hiddenLibraries.isEmpty() }
         model.noteSynced(id, 1_000)
-        assertEquals(1_000L, model.state.value.extras(id).lastSyncedAtMs)
+        eventually { model.state.value.extras(id).lastSyncedAtMs == 1_000L }
         model.remove(id)
+        eventually { !model.state.value.extras.containsKey(id) }
         assertNull(harness.preferences.serverExtras.first()[id])
-        assertFalse(model.state.value.extras.containsKey(id))
     }
 
     @Test
