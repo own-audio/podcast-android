@@ -7,6 +7,7 @@ import audio.own.core.servers.AddressRace
 import audio.own.core.servers.AddressScope
 import audio.own.core.servers.ConnectionMode
 import audio.own.core.servers.NetworkState
+import audio.own.core.servers.Reachability
 import audio.own.core.servers.ServerAddress
 import audio.own.core.servers.ServerAuth
 import audio.own.core.servers.ServerLibraryRef
@@ -14,6 +15,7 @@ import audio.own.core.servers.ServerRecord
 import audio.own.core.servers.ServerStore
 import audio.own.core.servers.StoredTokens
 import audio.own.core.servers.TypedAddress
+import audio.own.core.servers.UnreachableRetry
 import audio.own.core.strings.R
 import audio.own.podcastplayer.R as AppR
 import audio.own.kit.audiobookshelf.AudiobookshelfClient
@@ -62,6 +64,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -86,6 +90,12 @@ sealed interface ConnectionState {
     data object Checking : ConnectionState
     data class Connected(val url: String) : ConnectionState
     data object Unreachable : ConnectionState
+}
+
+private val ConnectionState.reachability: Reachability get() = when (this) {
+    ConnectionState.Checking -> Reachability.CHECKING
+    is ConnectionState.Connected -> Reachability.REACHABLE
+    ConnectionState.Unreachable -> Reachability.UNREACHABLE
 }
 
 /** What "Check Now" found, and when, so the button visibly did something. */
@@ -155,9 +165,22 @@ class ServersModel(
     val hostedService: String = HOSTED_SERVICE,
     private val demoServer: String = DEMO_SERVER,
     private val clock: Clock = Clock.systemUTC(),
+    /** Whether the app is on screen: unreachable servers are asked again only then. */
+    private val foreground: StateFlow<Boolean> = MutableStateFlow(false),
 ) {
     private val _state = MutableStateFlow(ServersState())
     val state: StateFlow<ServersState> = _state.asStateFlow()
+
+    private val retry = UnreachableRetry(
+        scope = scope,
+        foreground = foreground,
+        network = network,
+        reachability = state.map { s -> s.connections.mapValues { (_, c) -> c.reachability } }.distinctUntilChanged(),
+        canAsk = { !isOffline() },
+    ) { id ->
+        chooseAddress(id)
+        _state.value.connections[id] is ConnectionState.Connected
+    }
 
     private val _signedIn = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
@@ -179,6 +202,7 @@ class ServersModel(
                 if (it.connected) chooseAddresses()
             }
         }
+        retry.start()
     }
 
     // region Clients
@@ -574,8 +598,15 @@ class ServersModel(
 
     // region Changing and removing
 
+    /**
+     * The listener is about to use the server (its page, switching to it): if it didn't answer,
+     * it is asked again now rather than at the next step of the backoff.
+     */
+    fun aboutToUse(id: String) = retry.nudge(id)
+
     suspend fun select(id: String) {
         if (_state.value.server(id) == null) return
+        retry.nudge(id)
         _state.update { it.copy(activeId = id) }
         preferences.setActiveServerId(id)
     }

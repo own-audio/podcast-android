@@ -52,7 +52,7 @@ class ServerDetailViewModel(
             _state.update { it.copy(version = version) }
         }
         // As iOS: the page says at once whether the server answers and accepts the sign-in.
-        if (servers.state.value.checks[serverId] == null && !isOffline()) checkNow()
+        if (servers.state.value.checks[serverId] == null && !isOffline()) checkNow() else servers.aboutToUse(serverId)
     }
 
     fun checkNow() = viewModelScope.launch { servers.checkNow(serverId) }

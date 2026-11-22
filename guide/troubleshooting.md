@@ -26,6 +26,9 @@ can hold your server's addresses, so look it over before you post it publicly.
   address answers, check that the phone is on a network that reaches the server. For a home
   server you also use away from home, add its VPN or public address under **Addresses** (see
   [Servers and sync](servers.md#connection-and-addresses)).
+  While the app is on screen it also asks such a server again by itself: after 15 seconds,
+  then less often, at most every 5 minutes, and at once when you come back to the app or open
+  the server's page. In the background, or while the phone is locked, it doesn't.
 - **"This own.audio server is too old for this app."** The app needs own.audio server 1.0.4 or
   later; update the server.
 - **"This account has no podcast library on the server."** The Audiobookshelf account has no

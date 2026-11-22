@@ -69,6 +69,7 @@ import androidx.work.DelegatingWorkerFactory
 import audio.own.podcastplayer.podcasts.PodcastModel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import audio.own.core.servers.ServerLibraryRef
@@ -103,6 +104,9 @@ class AppContainer(context: Context) {
 
     val preferences: AppPreferences = DataStorePreferences(app)
     val network = NetworkMonitor(app).also { it.start() }
+
+    /** Whether a screen of the app is started; [OwnAudioApp] keeps it from the process lifecycle. */
+    val foreground = MutableStateFlow(false)
     val offline = OfflineSwitch()
     val answers = DiskAnswerCache(File(app.cacheDir, "server-responses"))
     val tokenSessions = TokenSessions()
@@ -133,6 +137,7 @@ class AppContainer(context: Context) {
         acceptLanguage = { appLocale().toLanguageTag() },
         log = log,
         scope = scope,
+        foreground = foreground,
     )
 
     /** Where every part of the podcast library is kept. */

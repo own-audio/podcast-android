@@ -1,6 +1,9 @@
 package audio.own.podcastplayer
 
 import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import audio.own.core.sync.PeriodicRefresh
@@ -16,6 +19,17 @@ class OwnAudioApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // A locked screen, the background and playing with the phone locked all stop the
+        // activity: what only the listener looking at the app needs stops with it.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                container.foreground.value = true
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                container.foreground.value = false
+            }
+        })
         container.log.info("app", "started ${container.versionName} (${container.versionCode})")
         container.scope.launch { container.servers.load() }
         container.loadServerIcons()
