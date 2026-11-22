@@ -21,20 +21,20 @@ both (P0).
 | P0 | Copy the foundation (music-android) and the spoken engine + ABS kit (book-android) | ◐ skeleton 2026-11-21 |
 | P1 | `:kit:feed`: RSS / Atom / Podcasting 2.0 parser and fetcher | ☑ 2026-11-21 |
 | P2 | Podcast library layer, the device's own feeds (`FeedLibrary`), Up Next, pending progress | ◐ domain logic done 2026-11-21; Room and wiring next |
-| P3 | Audiobookshelf podcast libraries | ☑ 2026-11-21 (source; screens in P6) |
+| P3 | Audiobookshelf podcast libraries | ☑ 2026-11-22: signed in and played on a real server (server files with `?token=`, feed-only episodes from the publisher) |
 | P4 | own.audio on v2, follow and unfollow included | ◐ source built 2026-11-21, live read test passes; the follow/play/unfollow round trip on a real account comes with the screens |
-| P5 | gPodder sync (`:kit:gpodder`) | ◐ client and sync algorithm done 2026-11-21; live sync with the app |
+| P5 | gPodder sync (`:kit:gpodder`) | ☑ 2026-11-22: signed in to podfetch, first sync merged both ways, Sync Now and Last Synced |
 | P6 | Screens: New Episodes, Shows, show, episode, Discover, search, player, Up Next | ◐ built 2026-11-21: two public feeds followed with no account, played with the notification and skip buttons, Up Next played on, resumed after a kill; the demo's shows played and resumed at the server's position. Open: Audiobookshelf/gPodder in the app, Share with the Family, the source built twice on first address choice, early renewal of expiring own.audio links, swap EpisodePlayer for :player:spoken's player |
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
 | P8 | Downloads, per-show rules, offline, refresh | ☐ |
-| P9 | Settings | ☐ |
+| P9 | Settings | ☑ 2026-11-22 (Playback, Streaming, Offline Mode; the Downloads rows come with P8) |
 | P10 | Summaries and Ask (hosted own.audio) | ☐ |
 | P11 | Android Auto, widget, deep links, voice, background refresh | ☐ |
 | P12 | Localization, accessibility, tablets, misuse tests | ☐ |
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P6 built 2026-11-21 (the app plays feeds with no account and own.audio shows). Next: P8 downloads and rules, P9 settings, then Audiobookshelf and gPodder in the app.
+**Where we stopped:** P3, P5 and P9 done 2026-11-22, with the P6 fixes (each source made once; links renewed before they expire) and Share with the Family. Next: P8 downloads and per-show rules (`:core:downloads` is in the repo), then P10 summaries, P11 system integrations. Still open from P6: swap `EpisodePlayer` for `:player:spoken`'s player.
 
 ## Rules for whoever executes this plan
 

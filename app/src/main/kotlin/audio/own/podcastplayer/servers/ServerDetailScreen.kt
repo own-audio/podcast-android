@@ -63,6 +63,10 @@ import audio.own.podcastplayer.ui.Page
 import audio.own.podcastplayer.ui.RowDivider
 import audio.own.podcastplayer.ui.TwoLines
 import java.util.Date
+import android.text.format.DateUtils
+import audio.own.podcastplayer.app.ServerExtras
+import audio.own.podcastplayer.podcasts.SwitchLine
+import java.io.File
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Everything the server page shows, so it can be drawn without a live server. */
@@ -73,6 +77,11 @@ data class ServerPageUi(
     val checking: Boolean,
     val refused: Boolean,
     val detail: ServerDetailState,
+    val extras: ServerExtras = ServerExtras(),
+    /** The server's own icon, once fetched. */
+    val icon: File? = null,
+    /** When "Last Synced" is measured from; the clock in tests. */
+    val now: Long = System.currentTimeMillis(),
 )
 
 /** Orange for "not now", as iOS's status lines; the app's accent read as an error beside them. */
@@ -94,6 +103,8 @@ fun ServerDetailContent(
     onRemoveAddress: (String) -> Unit,
     onRemove: () -> Unit,
     onDismissError: () -> Unit,
+    onLibraryShown: (String, Boolean) -> Unit = { _, _ -> },
+    onSyncNow: () -> Unit = {},
 ) {
     val server = ui.server
     val palette = LocalPalette.current
@@ -136,9 +147,8 @@ fun ServerDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.sm),
             ) {
                 Text(stringResource(AppR.string.kind), modifier = Modifier.weight(1f))
-                ServerKindIcon(server.kind, size = 22.dp)
-                // TODO(P5): "podfetch" for a gPodder server that said it is one.
-                Text(kindTitle(server.kind), color = palette.muted)
+                ServerKindIcon(server.kind, size = 22.dp, icon = ui.icon)
+                Text(if (ui.extras.software == "podfetch") stringResource(AppR.string.podfetch) else kindTitle(server.kind), color = palette.muted)
             }
             ui.detail.version?.let {
                 RowDivider()
@@ -148,7 +158,26 @@ fun ServerDetailContent(
             ValueRow(stringResource(R.string.name), server.displayName, onClick = { renaming = true })
         }
 
-        // TODO(P3): Libraries, a switch per podcast library. TODO(P5): Sync — Sync Now, Last Synced.
+        val libraries = server.libraries.orEmpty()
+        if (server.kind == ServerKinds.AUDIOBOOKSHELF && libraries.isNotEmpty()) {
+            Section(header = stringResource(AppR.string.libraries), footer = stringResource(AppR.string.libraries_footer)) {
+                libraries.forEachIndexed { index, library ->
+                    if (index > 0) RowDivider()
+                    SwitchLine(library.name, library.id !in ui.extras.hiddenLibraries) { onLibraryShown(library.id, it) }
+                }
+            }
+        }
+
+        if (server.kind == ServerKinds.GPODDER) {
+            Section(header = stringResource(AppR.string.sync), footer = stringResource(AppR.string.sync_footer)) {
+                ButtonRow(stringResource(AppR.string.sync_now), onClick = onSyncNow, working = ui.detail.syncing, enabled = !ui.detail.syncing)
+                ui.extras.lastSyncedAtMs?.let { at ->
+                    RowDivider()
+                    val ago = DateUtils.getRelativeTimeSpanString(at, maxOf(ui.now, at), DateUtils.MINUTE_IN_MILLIS).toString()
+                    ValueRow(stringResource(AppR.string.last_synced), ago, onClick = null)
+                }
+            }
+        }
 
         if (isOwnAudio) {
             Section(header = stringResource(R.string.account), footer = stringResource(AppR.string.account_pages_footer)) {

@@ -28,10 +28,9 @@ sealed interface Detected {
     /** An own.audio server new enough for this app (`/api/v2` revision 16 or later). */
     data class OwnAudio(override val host: String, val discovery: Discovery) : Detected
 
-    /** An Audiobookshelf server; its podcast libraries come with P3. */
     data class Audiobookshelf(override val host: String) : Detected
 
-    /** A gPodder sync server; [software] is "podfetch" when it said so. Sync comes with P5. */
+    /** A gPodder sync server; [software] is "podfetch" when it said so. */
     data class GPodder(override val host: String, val software: String?) : Detected
 }
 
@@ -128,6 +127,22 @@ class ServerDetector(
             if (code == 401 || code == 403) return@withContext Probe.Found(Detected.GPodder(host, null))
         }
         if (answered) Probe.Answered else null
+    }
+
+    /** The version Audiobookshelf says it is at [base], for the server page. */
+    suspend fun audiobookshelfVersion(base: String): String? = withContext(Dispatchers.IO) {
+        (get("${base.trimEnd('/')}/status")?.json()?.get("serverVersion") as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+    }
+
+    /** Whether Audiobookshelf answers at [base]: which of a saved server's addresses work here. */
+    suspend fun answersAsAudiobookshelf(base: String): Boolean = withContext(Dispatchers.IO) {
+        val json = get("${base.trimEnd('/')}/status")?.json() ?: return@withContext false
+        (json["app"] as? JsonPrimitive)?.content == "audiobookshelf" || ("serverVersion" in json && "isInit" in json)
+    }
+
+    /** Whether a gPodder server answers at [base]: it refuses the probe's device list without a sign-in. */
+    suspend fun answersAsGPodder(base: String): Boolean = withContext(Dispatchers.IO) {
+        status("${base.trimEnd('/')}/api/2/devices/own-audio-probe.json")?.let { it in 200..499 } == true
     }
 
     /** The body of an answer ("" when not 2xx or too big for a probe's); null when nothing answered. */

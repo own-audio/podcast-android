@@ -66,6 +66,11 @@ import audio.own.podcastplayer.ui.ButtonRow
 import audio.own.podcastplayer.ui.Page
 import audio.own.podcastplayer.ui.RowDivider
 import audio.own.podcastplayer.ui.TwoLines
+import audio.own.podcastplayer.app.PlaybackSettings
+import audio.own.podcastplayer.podcasts.ChoiceLine
+import audio.own.podcastplayer.podcasts.SwitchLine
+import audio.own.player.spoken.SpeedText
+import java.io.File
 
 /** The in-app language, on top of the system's per-app language setting. */
 enum class AppLanguage(val tag: String?) {
@@ -98,6 +103,10 @@ private fun AppLanguage.endonym(system: String) = when (this) {
 data class SettingsUi(
     val servers: List<ServerRecord>,
     val connections: Map<String, ConnectionState> = emptyMap(),
+    /** Each server's own icon, once fetched. */
+    val icons: Map<String, File> = emptyMap(),
+    val offlineMode: Boolean = false,
+    val playback: PlaybackSettings = PlaybackSettings(),
     val accent: AccentChoice,
     val language: AppLanguage,
     /** "1.0.0 (123)". */
@@ -111,6 +120,8 @@ fun SettingsContent(
     onOpenServer: (String) -> Unit,
     onRemoveServer: (String) -> Unit,
     onAddServer: () -> Unit,
+    onOfflineMode: (Boolean) -> Unit,
+    onPlayback: (PlaybackSettings) -> Unit,
     onAccent: (AccentChoice) -> Unit,
     onLanguage: (AppLanguage) -> Unit,
     onLicences: () -> Unit,
@@ -123,11 +134,19 @@ fun SettingsContent(
         Section(header = stringResource(R.string.servers), footer = stringResource(AppR.string.servers_footer)) {
             // own.audio first, as the source switch lists them.
             ui.servers.sortedBy { if (it.kind == ServerKinds.OWN_AUDIO) 0 else 1 }.forEach { server ->
-                ServerRow(server, ui.connections[server.id], onOpen = { onOpenServer(server.id) }, onRemove = { removing = server })
+                ServerRow(server, ui.connections[server.id], ui.icons[server.id], onOpen = { onOpenServer(server.id) }, onRemove = { removing = server })
                 RowDivider(start = 64.dp)
             }
             ButtonRow(stringResource(R.string.add_a_server), onClick = onAddServer, icon = Icons.Filled.Add, color = MaterialTheme.colorScheme.primary)
         }
+
+        // Downloads, Download on Wi-Fi Only and Keep at Most join Offline Mode with the downloads.
+        Section(header = null, footer = stringResource(AppR.string.downloads_offline_footer)) {
+            SwitchLine(stringResource(AppR.string.offline_mode), ui.offlineMode, onOfflineMode)
+        }
+
+        PlaybackSection(ui.playback, onPlayback)
+        StreamingSection(ui.playback, onPlayback)
 
         AccentColorPicker(selected = ui.accent, onSelect = onAccent)
 
@@ -157,10 +176,45 @@ fun SettingsContent(
     }
 }
 
+/** Skip intervals, the speed episodes start at, smart rewind, and playing on into New Episodes. */
+@Composable
+private fun PlaybackSection(settings: PlaybackSettings, onChange: (PlaybackSettings) -> Unit) {
+    Section(header = stringResource(AppR.string.playback)) {
+        val seconds: @Composable (Int) -> String = { stringResource(AppR.string.seconds_short, it) }
+        ChoiceLine(stringResource(AppR.string.skip_back), PlaybackSettings.SKIP_CHOICES, settings.skipBackSecs, seconds) { onChange(settings.copy(skipBackSecs = it)) }
+        RowDivider()
+        ChoiceLine(stringResource(AppR.string.skip_forward), PlaybackSettings.SKIP_CHOICES, settings.skipForwardSecs, seconds) { onChange(settings.copy(skipForwardSecs = it)) }
+        RowDivider()
+        ChoiceLine(stringResource(AppR.string.speed), PlaybackSettings.SPEED_CHOICES, settings.defaultRate, { SpeedText.text(it) }) { onChange(settings.copy(defaultRate = it)) }
+        RowDivider()
+        SwitchLine(stringResource(AppR.string.smart_rewind), settings.smartRewind) { onChange(settings.copy(smartRewind = it)) }
+        RowDivider()
+        SwitchLine(stringResource(AppR.string.play_new_after_up_next), settings.continueWithNewEpisodes) { onChange(settings.copy(continueWithNewEpisodes = it)) }
+    }
+}
+
+/** What plays on mobile data, and how much of a stream is kept ahead on the device. */
+@Composable
+private fun StreamingSection(settings: PlaybackSettings, onChange: (PlaybackSettings) -> Unit) {
+    val footer = stringResource(AppR.string.streaming_footer_downloaded_only) + "\n\n" + stringResource(AppR.string.streaming_footer_keep_ahead)
+    Section(header = stringResource(AppR.string.streaming), footer = footer) {
+        ChoiceLine(
+            stringResource(AppR.string.on_mobile_data),
+            PlaybackSettings.MobileData.entries,
+            settings.mobileData,
+            { stringResource(if (it == PlaybackSettings.MobileData.STREAM) AppR.string.stream else AppR.string.downloaded_only) },
+        ) { onChange(settings.copy(mobileData = it)) }
+        RowDivider()
+        ChoiceLine(stringResource(AppR.string.keep_ahead), PlaybackSettings.KEEP_AHEAD_CHOICES, settings.keepAheadMinutes, { stringResource(AppR.string.minutes_count, it) }) {
+            onChange(settings.copy(keepAheadMinutes = it))
+        }
+    }
+}
+
 /** A server in the list: a tap opens its page, a swipe or its menu removes it, after asking. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ServerRow(server: ServerRecord, connection: ConnectionState?, onOpen: () -> Unit, onRemove: () -> Unit) {
+private fun ServerRow(server: ServerRecord, connection: ConnectionState?, icon: File?, onOpen: () -> Unit, onRemove: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val swipe = rememberSwipeToDismissBoxState()
     LaunchedEffect(swipe.currentValue) {
@@ -190,7 +244,7 @@ private fun ServerRow(server: ServerRecord, connection: ConnectionState?, onOpen
             horizontalArrangement = Arrangement.spacedBy(Tokens.Spacing.md),
         ) {
             Box {
-                ServerKindIcon(server.kind, size = 32.dp)
+                ServerKindIcon(server.kind, size = 32.dp, icon = icon)
                 StatusDot(connection, Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp))
             }
             TwoLines(server.displayName, "${kindTitle(server.kind)} · ${server.auth.userName}", Modifier.weight(1f))

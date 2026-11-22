@@ -5,6 +5,7 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- Settings: skip intervals, speed, smart rewind, Play New Episodes After Up Next, On Mobile Data and Keep Ahead (P9). Audiobookshelf podcast libraries and gPodder sync servers (podfetch, gpodder.net, own.audio) can be added, with their own icons, a switch per library and Sync Now. Each server's source is made once; own.audio episode links are renewed before they expire. Share with the Family for your own shows. Titles escaped twice by a server ("&amp;#128640;") now show their characters.
 - `:core:downloads` and `:core:sync` (download workers and index, outboxes, background refresh, live updates), copied from music-android.
 - `:player:spoken`'s Media3 player copied from book-android; players wait through long signal gaps instead of failing after ten minutes.
 - P6: the podcast screens and player — New Episodes, Shows, a show and its settings, an episode with chapters and show notes, Add a Show (also from feed:// and podcast:// links), Discover (own.audio's directory, or Apple's charts and search), the mini player and the player with Speed, Sleep Timer, Chapters and Up Next; follows feeds with no account and own.audio shows; the device's feeds kept in Room; plays in the background with skip buttons on the notification; the last episode comes back paused after a relaunch.

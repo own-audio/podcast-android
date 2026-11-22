@@ -11,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -71,6 +72,12 @@ class EpisodePlayer(
 
         /** The episode played to its end; [playOn] false when the sleep timer stopped there. */
         fun onEnded(id: String, playOn: Boolean)
+
+        /**
+         * The server refused the link with `401` (a token revoked or expired early). The listener
+         * may get a fresh one and [PlaybackEngine.retry]; otherwise the episode stays stopped.
+         */
+        fun onRefused(id: String, url: String) {}
     }
 
     enum class Problem { NO_SIGNAL, CANT_PLAY }
@@ -101,7 +108,8 @@ class EpisodePlayer(
 
     override var listener: Listener? = null
 
-    private val exo: ExoPlayer = PlayerSetup.buildPlayer(context, dataSources.mediaSourceFactory(), ContentKind.SPEECH)
+    private val keepAhead = KeepAheadLoadControl()
+    private val exo: ExoPlayer = PlayerSetup.buildPlayer(context, dataSources.mediaSourceFactory(), ContentKind.SPEECH, keepAhead)
     private val focus = AudioFocusOnFirstPlay(PlayerSetup.audioAttributes(ContentKind.SPEECH))
     private val idleRelease = IdleDecoderRelease(exo)
     private val sleepTimer = SleepTimer(scope)
@@ -163,6 +171,15 @@ class EpisodePlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val refused = generateSequence<Throwable>(error) { it.cause }
+                    .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
+                    .firstOrNull { it.responseCode == 401 }
+                val item = _state.value.item
+                if (refused != null && item != null) {
+                    _state.update { it.copy(isPlaying = false, isLoading = true) }
+                    listener?.onRefused(item.id, refused.dataSpec.uri.toString())
+                    return
+                }
                 val noSignal = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
                     error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
                 _state.update { it.copy(problem = if (noSignal) Problem.NO_SIGNAL else Problem.CANT_PLAY, isPlaying = false, isLoading = false) }
@@ -255,6 +272,19 @@ class EpisodePlayer(
         val normalized = PlaybackSpeed.normalized(rate)
         exo.setPlaybackSpeed(normalized)
         _state.update { it.copy(rate = normalized) }
+    }
+
+    override fun retry() {
+        if (_state.value.item == null) return
+        _state.update { it.copy(problem = null) }
+        exo.prepare()
+        exo.play()
+    }
+
+    override fun setSkipIntervals(skip: SkipIntervals) = _state.update { it.copy(skip = skip) }
+
+    override fun setKeepAhead(ms: Long) {
+        keepAhead.aheadMs = ms
     }
 
     /** After a lost connection: once the network is back, the same episode carries on. */
@@ -408,6 +438,13 @@ interface PlaybackEngine {
     fun skipForward()
     fun setRate(rate: Float)
     fun retryIfWaiting()
+
+    /** Opens the episode again where it is, after the listener renewed what was refused. */
+    fun retry()
+    fun setSkipIntervals(skip: SkipIntervals)
+
+    /** How far ahead of the playhead a stream is loaded (Settings' Keep Ahead). */
+    fun setKeepAhead(ms: Long)
     fun stop()
     fun sleepAfter(preset: SleepTimer.Preset)
     fun sleepAtEndOfEpisode()

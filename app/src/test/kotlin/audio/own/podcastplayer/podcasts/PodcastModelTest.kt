@@ -11,6 +11,7 @@ import audio.own.kit.feed.FeedFetcher
 import audio.own.kit.feed.FeedParser
 import audio.own.kit.feed.FeedShow
 import audio.own.kit.feed.XmlParserFactory
+import audio.own.player.core.SkipIntervals
 import audio.own.player.core.SleepTimer
 import audio.own.player.spoken.SmartRewind
 import audio.own.player.spoken.SpokenChapter
@@ -83,6 +84,15 @@ class FakeEngine : PlaybackEngine {
     override fun skipForward() = Unit
     override fun setRate(rate: Float) = _state.update { it.copy(rate = rate) }
     override fun retryIfWaiting() = Unit
+    var retries = 0
+    var keepAheadMs = 0L
+    override fun retry() {
+        retries++
+    }
+    override fun setSkipIntervals(skip: SkipIntervals) = _state.update { it.copy(skip = skip) }
+    override fun setKeepAhead(ms: Long) {
+        keepAheadMs = ms
+    }
     override fun stop() = _state.update { EpisodePlayer.State() }
     override fun sleepAfter(preset: SleepTimer.Preset) = Unit
     override fun sleepAtEndOfEpisode() = Unit

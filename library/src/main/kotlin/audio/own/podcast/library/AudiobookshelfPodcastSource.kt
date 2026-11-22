@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -53,10 +54,10 @@ import java.util.concurrent.TimeUnit
  *   the server as an HLS transcode.
  */
 class AudiobookshelfPodcastSource(
-    val client: AudiobookshelfClient,
+    client: AudiobookshelfClient,
     private val store: ListeningStore,
     private val feeds: FeedLoader,
-    private val canAddShows: Boolean,
+    canAddShows: Boolean,
     private val device: DeviceInfo = DeviceInfo(
         deviceId = "own-audio-podcasts",
         clientName = "own.audio Podcasts",
@@ -69,14 +70,22 @@ class AudiobookshelfPodcastSource(
     /** Waits until the server has written an HLS playlist's first segment. Replaced in tests. */
     private val awaitPlaylist: suspend (HttpUrl) -> Unit = { waitForPlaylist(client.http.client, it) },
 ) : PodcastSource {
+    /** The client at the address in use; the app swaps it when the address or the sign-in changes. */
+    @Volatile
+    var client: AudiobookshelfClient = client
+
+    /** Whether the account may upload, so shows can be added; read again at each sign-in. */
+    @Volatile
+    var canAddShows: Boolean = canAddShows
+
     /** A feed read this session: validators for the next conditional fetch, the episodes only it has, when it was asked. */
     private data class FeedCache(val validators: FeedFetcher.Validators?, val feedOnly: List<Episode>, val fetchedAt: Instant)
 
     private val feedCache = ConcurrentHashMap<String, FeedCache>()
     private val items = ConcurrentHashMap<String, PodcastItem>()
 
-    override val capabilities: Set<Capability> =
-        setOf(Capability.SEARCH, Capability.SYNCS_PROGRESS, Capability.SERVER_DOWNLOADS) + if (canAddShows) setOf(Capability.ADD_BY_URL) else emptySet()
+    override val capabilities: Set<Capability>
+        get() = setOf(Capability.SEARCH, Capability.SYNCS_PROGRESS, Capability.SERVER_DOWNLOADS) + if (canAddShows) setOf(Capability.ADD_BY_URL) else emptySet()
 
     // MARK: shows and episodes
 
@@ -304,6 +313,8 @@ class AudiobookshelfPodcastSource(
         val item = known ?: translating { client.podcast(key.showId) }.also { items[key.showId] = it }
         val file = item.media.episodes?.firstOrNull { it.id == key.episodeId }?.audioFile ?: throw SourceException.NotFound()
         val token = translating { client.freshToken() }
+        // The link lives as long as the token in it; the player asks again a little before.
+        val expiresAt = client.tokens.current?.expiresAtMillis?.takeIf { it != audio.own.kit.audiobookshelf.Tokens.NEVER }?.let(Instant::ofEpochMilli)
         if (!canDecode(file.mimeType)) {
             // The play session says what the device plays, so the server transcodes only this.
             val supported = DEFAULT_SUPPORTED_MIME_TYPES.filter(canDecode)
@@ -311,10 +322,19 @@ class AudiobookshelfPodcastSource(
             val track = session.audioTracks.firstOrNull() ?: throw SourceException.NotFound()
             val url = client.mediaUrl(track.contentUrl, token)
             if (session.isHls) awaitPlaylist(url)
-            return Playback(url.toString(), isServerFile = true, isHls = session.isHls, isTranscode = session.isHls)
+            return Playback(url.toString(), isServerFile = true, isHls = session.isHls, isTranscode = session.isHls, expiresAt = expiresAt)
         }
         val ino = file.ino ?: throw SourceException.NotFound()
-        return Playback(client.fileUrl(key.showId, ino, token).toString(), isServerFile = true)
+        return Playback(client.fileUrl(key.showId, ino, token).toString(), isServerFile = true, expiresAt = expiresAt)
+    }
+
+    /**
+     * The server refused the token in [url] (`401`: revoked, or expired before its time): a new
+     * one is fetched, shared with any request doing the same, so the next [playback] carries it.
+     */
+    suspend fun renewAfterRefusal(url: String) {
+        val stale = url.toHttpUrlOrNull()?.queryParameter("token") ?: return
+        translating { client.tokenAfterRefusal(stale) }
     }
 
     // MARK: mapping

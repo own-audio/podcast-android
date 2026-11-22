@@ -136,4 +136,30 @@
     </plurals>
     <string name="feed_placeholder" translatable="false">https://example.com/feed.xml</string>
     <string name="apple_podcasts" translatable="false">Apple Podcasts</string>
+    <!-- Settings (P9) -->
+    <string name="downloads_offline_footer">Offline Mode shows and plays only what is on this device, as the app does on its own with no network.</string>
+    <string name="playback">Playback</string>
+    <string name="skip_back">Skip Back</string>
+    <string name="skip_forward">Skip Forward</string>
+    <string name="smart_rewind">Smart Rewind</string>
+    <string name="play_new_after_up_next">Play New Episodes After Up Next</string>
+    <string name="streaming">Streaming</string>
+    <string name="on_mobile_data">On Mobile Data</string>
+    <string name="stream">Stream</string>
+    <string name="downloaded_only">Downloaded Only</string>
+    <string name="keep_ahead">Keep Ahead</string>
+    <string name="streaming_footer_downloaded_only">Downloaded Only plays nothing that is not on this device while on mobile data.</string>
+    <string name="streaming_footer_keep_ahead">While an episode streams, its next minutes are kept on this device, on mobile data too, so a tunnel or a gap in the signal goes unheard; with Data Saver, 5 minutes.</string>
+    <string name="error_mobile_data">On mobile data only downloaded episodes play. You can change this in Settings.</string>
+    <!-- Audiobookshelf and gPodder -->
+    <string name="error_no_podcast_library">This account has no podcast library on the server.</string>
+    <string name="error_podfetch_admin">The server refuses this account for syncing. On podfetch the admin account can\'t sync: add a separate user there and sign in with it.</string>
+    <string name="libraries">Libraries</string>
+    <string name="libraries_footer">The podcast libraries on this server. A library you turn off leaves New Episodes, Shows and the switch; with more than one, each is in the switch on its own.</string>
+    <string name="sync">Sync</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="last_synced">Last Synced</string>
+    <string name="sync_footer">This device\'s shows and positions are kept in step with the account, as every other app signed in to it does.</string>
+    <string name="podfetch" translatable="false">podfetch</string>
+    <string name="share_with_the_family">Share with the Family</string>
 </resources>

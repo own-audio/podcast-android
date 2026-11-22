@@ -13,8 +13,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+import java.util.UUID
 
-/** Small state that outlives the process: the accent, Offline Mode, the server last added. */
+/** Small state that outlives the process: the accent, Offline Mode, the server last added, the playback settings. */
 interface AppPreferences {
     val accent: Flow<AccentChoice>
 
@@ -47,7 +52,23 @@ interface AppPreferences {
     suspend fun notificationsAsked(): Boolean
 
     suspend fun setNotificationsAsked()
+
+    val playback: Flow<PlaybackSettings>
+
+    suspend fun setPlayback(settings: PlaybackSettings)
+
+    /** By server id. */
+    val serverExtras: Flow<Map<String, ServerExtras>>
+
+    /** Null forgets the server's. */
+    suspend fun setServerExtras(serverId: String, extras: ServerExtras?)
+
+    /** A random id made once per install: the gPodder device id is made from it. */
+    suspend fun installId(): String
 }
+
+private val PrefsJson = Json { ignoreUnknownKeys = true }
+private val ExtrasSerializer = MapSerializer(String.serializer(), ServerExtras.serializer())
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -96,7 +117,37 @@ class DataStorePreferences(context: Context) : AppPreferences {
         store.edit { it[NOTIFICATIONS_ASKED] = true }
     }
 
+    override val playback: Flow<PlaybackSettings> = store.data.map { prefs ->
+        prefs[PLAYBACK]?.let { runCatching { PrefsJson.decodeFromString(PlaybackSettings.serializer(), it) }.getOrNull() } ?: PlaybackSettings()
+    }
+
+    override suspend fun setPlayback(settings: PlaybackSettings) {
+        store.edit { it[PLAYBACK] = PrefsJson.encodeToString(PlaybackSettings.serializer(), settings) }
+    }
+
+    override val serverExtras: Flow<Map<String, ServerExtras>> = store.data.map { prefs ->
+        prefs[SERVER_EXTRAS]?.let { runCatching { PrefsJson.decodeFromString(ExtrasSerializer, it) }.getOrNull() } ?: emptyMap()
+    }
+
+    override suspend fun setServerExtras(serverId: String, extras: ServerExtras?) {
+        store.edit { prefs ->
+            val held = prefs[SERVER_EXTRAS]?.let { runCatching { PrefsJson.decodeFromString(ExtrasSerializer, it) }.getOrNull() }.orEmpty()
+            val next = if (extras == null) held - serverId else held + (serverId to extras)
+            prefs[SERVER_EXTRAS] = PrefsJson.encodeToString(ExtrasSerializer, next)
+        }
+    }
+
+    override suspend fun installId(): String {
+        store.data.first()[INSTALL_ID]?.let { return it }
+        var made = ""
+        store.edit { prefs -> made = prefs[INSTALL_ID] ?: UUID.randomUUID().toString().also { prefs[INSTALL_ID] = it } }
+        return made
+    }
+
     private companion object {
+        val PLAYBACK = stringPreferencesKey("playback")
+        val SERVER_EXTRAS = stringPreferencesKey("serverExtras")
+        val INSTALL_ID = stringPreferencesKey("installId")
         val ACTIVE_SOURCE = stringPreferencesKey("activeSource")
         val SHOWS_SORT = stringPreferencesKey("shows.sort")
         val AUTO_QUEUED_AT = longPreferencesKey("upNext.autoQueuedAt")
@@ -159,4 +210,22 @@ class MemoryPreferences(active: String? = null) : AppPreferences {
     override suspend fun setNotificationsAsked() {
         asked = true
     }
+
+    private val playbackFlow = MutableStateFlow(PlaybackSettings())
+    override val playback: Flow<PlaybackSettings> = playbackFlow
+
+    override suspend fun setPlayback(settings: PlaybackSettings) {
+        playbackFlow.value = settings
+    }
+
+    private val extrasFlow = MutableStateFlow<Map<String, ServerExtras>>(emptyMap())
+    override val serverExtras: Flow<Map<String, ServerExtras>> = extrasFlow
+
+    override suspend fun setServerExtras(serverId: String, extras: ServerExtras?) {
+        extrasFlow.update { if (extras == null) it - serverId else it + (serverId to extras) }
+    }
+
+    var install = "0123456789abcdef"
+
+    override suspend fun installId() = install
 }

@@ -136,4 +136,29 @@
         <item quantity="many">%d epizody</item>
         <item quantity="other">%d epizod</item>
     </plurals>
+    <!-- Settings (P9) -->
+    <string name="downloads_offline_footer">Režim offline zobrazí a přehraje jen to, co je v tomto zařízení, stejně jako aplikace sama bez sítě.</string>
+    <string name="playback">Přehrávání</string>
+    <string name="skip_back">Přeskočit zpět</string>
+    <string name="skip_forward">Přeskočit vpřed</string>
+    <string name="smart_rewind">Chytré přetočení</string>
+    <string name="play_new_after_up_next">Po frontě přehrávat nové epizody</string>
+    <string name="streaming">Streamování</string>
+    <string name="on_mobile_data">Na mobilních datech</string>
+    <string name="stream">Streamovat</string>
+    <string name="downloaded_only">Jen stažené</string>
+    <string name="keep_ahead">Uchovávat dopředu</string>
+    <string name="streaming_footer_downloaded_only">Jen stažené na mobilních datech nepřehraje nic, co není v tomto zařízení.</string>
+    <string name="streaming_footer_keep_ahead">Během streamování se v tomto zařízení uchovávají další minuty epizody, i přes mobilní data, takže tunel ani výpadek signálu nebude slyšet; se spořičem dat 5 minut.</string>
+    <string name="error_mobile_data">Na mobilních datech se přehrávají jen stažené epizody. Změnit to můžete v Nastavení.</string>
+    <!-- Audiobookshelf and gPodder -->
+    <string name="error_no_podcast_library">Tento účet nemá na serveru žádnou podcastovou knihovnu.</string>
+    <string name="error_podfetch_admin">Server tento účet k synchronizaci nepustí. Na podfetch se správcovský účet synchronizovat nemůže: přidejte tam samostatného uživatele a přihlaste se jím.</string>
+    <string name="libraries">Knihovny</string>
+    <string name="libraries_footer">Podcastové knihovny na tomto serveru. Vypnutá knihovna zmizí z nových epizod, pořadů i přepínače; je-li jich víc, má každá v přepínači vlastní položku.</string>
+    <string name="sync">Synchronizace</string>
+    <string name="sync_now">Synchronizovat</string>
+    <string name="last_synced">Naposledy synchronizováno</string>
+    <string name="sync_footer">Pořady a pozice v tomto zařízení se udržují ve shodě s účtem, stejně jako v každé další aplikaci, která je k němu přihlášená.</string>
+    <string name="share_with_the_family">Sdílet s rodinou</string>
 </resources>

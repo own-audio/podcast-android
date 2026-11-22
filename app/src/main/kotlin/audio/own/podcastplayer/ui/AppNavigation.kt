@@ -129,10 +129,16 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
         }
         composable(Routes.SETTINGS) {
             val context = LocalContext.current
+            val icons by container.serverIcons.icons.collectAsStateWithLifecycle()
+            val offlineMode by container.preferences.offlineMode.collectAsState(initial = false)
+            val podcasts by container.podcasts.state.collectAsStateWithLifecycle()
             SettingsContent(
                 ui = SettingsUi(
                     servers = servers.servers,
                     connections = servers.connections,
+                    icons = icons,
+                    offlineMode = offlineMode,
+                    playback = podcasts.settings,
                     accent = accent(container),
                     language = AppLanguage.current(),
                     version = "${container.versionName} (${container.versionCode})",
@@ -141,6 +147,8 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
                 onOpenServer = { nav.navigate("server/$it") },
                 onRemoveServer = { id -> container.servers.scopeLaunch { container.servers.remove(id) } },
                 onAddServer = { nav.navigate(Routes.ADD_SERVER) },
+                onOfflineMode = { on -> scope.launch { container.preferences.setOfflineMode(on) } },
+                onPlayback = container.podcasts::setPlaybackSettings,
                 onAccent = { choice -> scope.launch { container.preferences.setAccent(choice) } },
                 onLanguage = { AppLanguage.apply(it); context.findActivity()?.recreate() },
                 onLicences = { nav.navigate(Routes.LICENCES) },
@@ -166,8 +174,18 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
         }
         composable(Routes.SERVER) { entry ->
             val id = arg(entry)
-            val vm = viewModel { ServerDetailViewModel(id, container.servers, ServerDetector(container.http, container.userAgent, container.log), container.log) { container.offline.isOffline } }
+            val vm = viewModel {
+                ServerDetailViewModel(
+                    id,
+                    container.servers,
+                    ServerDetector(container.http, container.userAgent, container.log),
+                    container.log,
+                    isOffline = { container.offline.isOffline },
+                    sync = container.podcasts::syncNow,
+                )
+            }
             val detail by vm.state.collectAsStateWithLifecycle()
+            val icons by container.serverIcons.icons.collectAsStateWithLifecycle()
             LaunchedEffect(detail.gone) { if (detail.gone) nav.popBackStack() }
             val record = servers.server(id)
             if (record == null) {
@@ -182,6 +200,8 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
                     checking = id in servers.checking,
                     refused = servers.isRefused(id),
                     detail = detail,
+                    extras = servers.extras(id),
+                    icon = icons[id],
                 ),
                 onBack = back,
                 onCheckNow = { vm.checkNow() },
@@ -196,6 +216,8 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
                 onRemoveAddress = { vm.removeAddress(it) },
                 onRemove = vm::remove,
                 onDismissError = vm::dismissErrors,
+                onLibraryShown = { library, shown -> vm.setLibraryShown(library, shown) },
+                onSyncNow = vm::syncNow,
             )
         }
         composable(Routes.SIGN_IN_AGAIN) { entry ->

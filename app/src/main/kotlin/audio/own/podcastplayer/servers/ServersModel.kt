@@ -9,11 +9,21 @@ import audio.own.core.servers.ConnectionMode
 import audio.own.core.servers.NetworkState
 import audio.own.core.servers.ServerAddress
 import audio.own.core.servers.ServerAuth
+import audio.own.core.servers.ServerLibraryRef
 import audio.own.core.servers.ServerRecord
 import audio.own.core.servers.ServerStore
 import audio.own.core.servers.StoredTokens
 import audio.own.core.servers.TypedAddress
 import audio.own.core.strings.R
+import audio.own.podcastplayer.R as AppR
+import audio.own.kit.audiobookshelf.AudiobookshelfClient
+import audio.own.kit.audiobookshelf.AudiobookshelfError
+import audio.own.kit.audiobookshelf.AudiobookshelfHttp
+import audio.own.kit.audiobookshelf.NetworkLog
+import audio.own.kit.audiobookshelf.me as absMe
+import audio.own.kit.audiobookshelf.podcastLibraries
+import audio.own.kit.gpodder.GPodderClient
+import audio.own.kit.gpodder.GPodderException
 import audio.own.kit.ownaudio.AnswerCache
 import audio.own.kit.ownaudio.Discovery
 import audio.own.kit.ownaudio.OwnAudioClient
@@ -33,10 +43,12 @@ import audio.own.kit.ownaudio.signIn
 import audio.own.kit.ownaudio.signOut
 import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.AppPreferences
+import audio.own.podcastplayer.app.ServerExtras
 import audio.own.podcastplayer.app.UserFacingException
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
@@ -51,9 +63,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 
@@ -96,7 +110,13 @@ data class ServersState(
     val checks: Map<String, ConnectionCheck> = emptyMap(),
     val checking: Set<String> = emptySet(),
     val pendingTwoFactor: PendingTwoFactor? = null,
+    /** What the app keeps beside each record: podfetch, may add shows, hidden libraries, last sync. */
+    val extras: Map<String, ServerExtras> = emptyMap(),
+    /** The own.audio modules each server has on, learned with its address. */
+    val modules: Map<String, Set<String>> = emptyMap(),
 ) {
+    fun extras(id: String): ServerExtras = extras[id] ?: ServerExtras()
+
     val active: ServerRecord? get() = servers.firstOrNull { it.id == activeId }
 
     fun server(id: String): ServerRecord? = servers.firstOrNull { it.id == id }
@@ -147,7 +167,9 @@ class ServersModel(
         val servers = store.loadAll()
         val saved = preferences.activeServerId()
         val active = saved?.takeIf { id -> servers.any { it.id == id } } ?: servers.firstOrNull()?.id
-        _state.update { it.copy(loaded = true, servers = servers, activeId = active) }
+        val extras = preferences.serverExtras.first()
+        _state.update { it.copy(loaded = true, servers = servers, activeId = active, extras = extras) }
+        scope.launch { preferences.serverExtras.collect { held -> _state.update { it.copy(extras = held) } } }
         log.info("servers", "${servers.size} server(s) saved")
         scope.launch { chooseAddresses() }
         // After a network change settles, the fastest address may be another one.
@@ -175,6 +197,48 @@ class ServersModel(
             isOffline = isOffline,
         )
     }
+
+    private val absSessions = ConcurrentHashMap<String, audio.own.kit.audiobookshelf.TokenSession>()
+
+    /** Audiobookshelf's HTTP side, shared by every client: its failures go to the app's log. */
+    private val absHttp = AudiobookshelfHttp(http, userAgent, log = NetworkLog { log.error("audiobookshelf", it) })
+
+    private val absCache = cache?.let { answers ->
+        object : audio.own.kit.audiobookshelf.AnswerCache {
+            override fun data(key: String): ByteArray? = answers.get("abs|$key")
+
+            override fun store(data: ByteArray, key: String) = answers.put("abs|$key", data)
+        }
+    }
+
+    /** Audiobookshelf's client for a saved server, at the address in use; null for other kinds. */
+    fun audiobookshelf(serverId: String): AudiobookshelfClient? {
+        val record = _state.value.server(serverId) ?: return null
+        if (record.kind != ServerKinds.AUDIOBOOKSHELF || record.auth !is ServerAuth.Audiobookshelf) return null
+        val url = baseUrl(record).toHttpUrlOrNull() ?: return null
+        return AudiobookshelfClient(url, absSession(record), absHttp, absCache, record.id, isOffline)
+    }
+
+    /** One token session per account for as long as the app runs: its refresh token is single-use. */
+    private fun absSession(record: ServerRecord) = absSessions.getOrPut(record.id) {
+        val stored = (record.auth as? ServerAuth.Audiobookshelf)?.tokens
+        val keeper = audio.own.kit.audiobookshelf.TokenStore { tokens ->
+            store.updateTokens(record.id, tokens?.toStored())
+            if (tokens == null) log.error("servers", "Audiobookshelf refused the saved sign-in")
+            reload()
+        }
+        audio.own.kit.audiobookshelf.TokenSession(stored?.toAbsTokens(), keeper)
+    }
+
+    /** The gPodder client for a saved account, at the address in use; null for other kinds. */
+    fun gpodder(serverId: String): GPodderClient? {
+        val record = _state.value.server(serverId) ?: return null
+        val auth = record.auth as? ServerAuth.GPodder ?: return null
+        return GPodderClient(baseUrl(record), auth.userName, auth.password, http, userAgent)
+    }
+
+    /** The address requests go to now: the one chosen on this network, the fixed one, or the one added. */
+    fun address(serverId: String): String? = _state.value.server(serverId)?.let(::baseUrl)
 
     private fun baseUrl(record: ServerRecord): String = when (val mode = record.connection) {
         is ConnectionMode.Fixed -> mode.url
@@ -209,8 +273,8 @@ class ServersModel(
      */
     suspend fun signIn(address: String, username: String, password: String, name: String, replacing: String? = null, kind: String? = null) {
         when (val found = detector.detect(address, kind)) {
-            // TODO(P3): Audiobookshelf podcast libraries. TODO(P5): gPodder sync accounts.
-            is Detected.Audiobookshelf, is Detected.GPodder -> throw UserFacingException(R.string.error_later_version)
+            is Detected.Audiobookshelf -> finishAudiobookshelf(found.host, username, password, name, replacing)
+            is Detected.GPodder -> finishGPodder(found.host, found.software, username, password, name, replacing)
             is Detected.OwnAudio -> {
                 val tokens = try {
                     unsigned(found.host).signIn(username.trim(), password, device)
@@ -347,13 +411,92 @@ class ServersModel(
             userId = me.id,
             addedAtEpochMs = clock.millis(),
         ).learning(learned)
+        saveSignedIn(record, null, replacing)
+    }
+
+    /**
+     * Signs in to Audiobookshelf; the account must see at least one podcast library. Whether it
+     * may upload says whether shows can be added there.
+     */
+    private suspend fun finishAudiobookshelf(host: String, username: String, password: String, name: String, replacing: String?) {
+        val url = host.toHttpUrlOrNull() ?: throw UserFacingException(R.string.error_invalid_address)
+        val signIn = try {
+            AudiobookshelfClient.signIn(url, username.trim(), password, absHttp)
+        } catch (e: AudiobookshelfError) {
+            throw absProblem(e)
+        }
+        val libraries = try {
+            AudiobookshelfClient(url, audio.own.kit.audiobookshelf.TokenSession(signIn.tokens), absHttp).podcastLibraries()
+        } catch (e: AudiobookshelfError) {
+            throw absProblem(e)
+        }
+        if (libraries.isEmpty()) throw UserFacingException(AppR.string.error_no_podcast_library)
+        val record = ServerRecord(
+            id = UUID.randomUUID().toString(),
+            kind = ServerKinds.AUDIOBOOKSHELF,
+            displayName = name.trim().ifEmpty { url.host },
+            host = host.trimEnd('/'),
+            auth = ServerAuth.Audiobookshelf(signIn.user.username, signIn.tokens.toStored()),
+            libraries = libraries.sortedBy { it.displayOrder ?: 0 }.map { ServerLibraryRef(it.id, it.name) },
+            userId = signIn.user.id,
+            addedAtEpochMs = clock.millis(),
+        )
+        saveSignedIn(record, ServerExtras(canAddShows = signIn.user.permissions.upload), replacing)
+    }
+
+    private fun absProblem(e: AudiobookshelfError) = UserFacingException(
+        when (e) {
+            AudiobookshelfError.InvalidCredentials, AudiobookshelfError.SignedOut -> R.string.error_rejected
+            is AudiobookshelfError.RateLimited -> R.string.error_rate_limited
+            is AudiobookshelfError.Network, AudiobookshelfError.Offline -> R.string.error_unreachable
+            is AudiobookshelfError.Http -> if (e.status == 401 || e.status == 403) R.string.error_rejected else R.string.error_generic
+            AudiobookshelfError.Decoding -> R.string.error_unreadable
+        },
+        e,
+    )
+
+    /**
+     * Signs in to a gPodder server and registers this device on the account; the password is
+     * kept, as the protocol signs every request with it.
+     */
+    private suspend fun finishGPodder(host: String, software: String?, username: String, password: String, name: String, replacing: String?) {
+        val user = username.trim()
+        val device = gpodderDevice()
+        val client = GPodderClient(host, user, password, http, userAgent)
+        try {
+            client.login()
+            client.registerDevice(device, this.device.name, "mobile")
+        } catch (e: GPodderException) {
+            throw gpodderProblem(e)
+        }
+        val record = ServerRecord(
+            id = UUID.randomUUID().toString(),
+            kind = ServerKinds.GPODDER,
+            displayName = name.trim().ifEmpty { host.toHttpUrlOrNull()?.host ?: host },
+            host = host.trimEnd('/'),
+            auth = ServerAuth.GPodder(user, password, device),
+            addedAtEpochMs = clock.millis(),
+        )
+        saveSignedIn(record, ServerExtras(software = software), replacing)
+    }
+
+    /** This install's device on gPodder accounts: the same on every account, for the life of the install. */
+    suspend fun gpodderDevice(): String = "own-audio-podcasts-" + preferences.installId().replace("-", "").take(8)
+
+    /** Saves a newly signed-in server, or puts the sign-in on the saved one it replaces. */
+    private suspend fun saveSignedIn(record: ServerRecord, extras: ServerExtras?, replacing: String?) {
         if (replacing != null) {
             replaceSignIn(replacing, record)
+            if (extras != null) {
+                val held = _state.value.extras(replacing)
+                preferences.setServerExtras(replacing, held.copy(software = extras.software ?: held.software, canAddShows = extras.canAddShows))
+            }
         } else {
             store.add(record)
             sessions.remove(record.id)
-            session(record)
-            _state.update { it.copy(servers = it.servers + record, activeId = record.id) }
+            absSessions.remove(record.id)
+            if (extras != null) preferences.setServerExtras(record.id, extras)
+            _state.update { it.copy(servers = it.servers + record, activeId = record.id, extras = if (extras != null) it.extras + (record.id to extras) else it.extras) }
             preferences.setActiveServerId(record.id)
             log.info("servers", "added ${record.displayName}")
             scope.launch { chooseAddress(record.id) }
@@ -377,10 +520,15 @@ class ServersModel(
         val same = saved.kind == fresh.kind &&
             if (saved.serverIdentity != null && fresh.serverIdentity != null) saved.serverIdentity == fresh.serverIdentity else saved.host == fresh.host
         if (!same) throw UserFacingException(R.string.error_different_server)
-        val updated = saved.copy(auth = fresh.auth, serverIdentity = fresh.serverIdentity ?: saved.serverIdentity, userId = fresh.userId)
-            .learning(fresh.addresses.filter { it.origin == AddressOrigin.SERVER })
+        val updated = saved.copy(
+            auth = fresh.auth,
+            serverIdentity = fresh.serverIdentity ?: saved.serverIdentity,
+            userId = fresh.userId ?: saved.userId,
+            libraries = fresh.libraries ?: saved.libraries,
+        ).learning(fresh.addresses.filter { it.origin == AddressOrigin.SERVER })
         // A new session for the new tokens; the old one would refresh with a dead token.
         sessions.remove(id)
+        absSessions.remove(id)
         store.update(updated, signIn = true)
         reload()
         _state.update { it.copy(checks = it.checks - id) }
@@ -436,14 +584,18 @@ class ServersModel(
     suspend fun remove(id: String) {
         val client = client(id)
         if (client != null) scope.launch { runCatching { client.signOut() } }
+        val abs = audiobookshelf(id)
+        if (abs != null) scope.launch { runCatching { abs.signOut() } }
         sessions.remove(id)
+        absSessions.remove(id)
         store.remove(id)
+        preferences.setServerExtras(id, null)
         // Saved answers are filed by server; letting the others be fetched again is simpler than
         // picking them apart.
         clearCache()
         val remaining = store.loadAll()
         val active = _state.value.activeId.takeIf { a -> remaining.any { it.id == a } } ?: remaining.firstOrNull()?.id
-        _state.update { it.copy(servers = remaining, activeId = active, connections = it.connections - id, checks = it.checks - id) }
+        _state.update { it.copy(servers = remaining, activeId = active, connections = it.connections - id, checks = it.checks - id, extras = it.extras - id, modules = it.modules - id) }
         preferences.setActiveServerId(active)
         log.info("servers", "removed a server")
     }
@@ -479,6 +631,30 @@ class ServersModel(
         reload()
     }
 
+    /** An Audiobookshelf library shown or hidden in New Episodes, Shows and the switch. */
+    suspend fun setLibraryHidden(id: String, libraryId: String, hidden: Boolean) {
+        val held = _state.value.extras(id)
+        val next = held.copy(hiddenLibraries = if (hidden) held.hiddenLibraries + libraryId else held.hiddenLibraries - libraryId)
+        _state.update { it.copy(extras = it.extras + (id to next)) }
+        preferences.setServerExtras(id, next)
+    }
+
+    /** The podcast libraries the server lists now, kept on its record when they changed. */
+    suspend fun updateLibraries(id: String, libraries: List<ServerLibraryRef>) {
+        val record = _state.value.server(id) ?: return
+        if (record.libraries == libraries) return
+        store.update(record.copy(libraries = libraries))
+        reload()
+    }
+
+    /** A gPodder account's sync finished. */
+    suspend fun noteSynced(id: String, atEpochMs: Long) {
+        if (_state.value.server(id) == null) return
+        val next = _state.value.extras(id).copy(lastSyncedAtMs = atEpochMs)
+        _state.update { it.copy(extras = it.extras + (id to next)) }
+        preferences.setServerExtras(id, next)
+    }
+
     private suspend fun reload() {
         val servers = store.loadAll()
         _state.update { it.copy(servers = servers) }
@@ -498,20 +674,34 @@ class ServersModel(
      */
     suspend fun chooseAddress(id: String) {
         val record = _state.value.server(id) ?: return
-        if (record.kind != ServerKinds.OWN_AUDIO) return
         _state.update { it.copy(connections = it.connections + (id to ConnectionState.Checking)) }
         val candidates = when (val mode = record.connection) {
             is ConnectionMode.Fixed -> listOf(mode.url)
             ConnectionMode.Automatic -> record.candidateAddresses.map { it.url }
         }
-        val winner = AddressRace.race(record, candidates, record.serverIdentity) { url -> check(url) }
+        val discoveries = ConcurrentHashMap<String, Discovery>()
+        val identity = if (record.kind == ServerKinds.OWN_AUDIO) record.serverIdentity else null
+        val winner = AddressRace.race(record, candidates, identity) { url ->
+            when (record.kind) {
+                ServerKinds.OWN_AUDIO -> check(url, discoveries)
+                ServerKinds.AUDIOBOOKSHELF -> withTimeoutOrNull(AddressRace.TIMEOUT_MS) { AddressCheck(url, null).takeIf { detector.answersAsAudiobookshelf(url) } }
+                else -> withTimeoutOrNull(AddressRace.TIMEOUT_MS) { AddressCheck(url, null).takeIf { detector.answersAsGPodder(url) } }
+            }
+        }
         if (winner == null) {
             log.error("servers", "no address of ${record.displayName} answers")
             _state.update { it.copy(connections = it.connections + (id to ConnectionState.Unreachable)) }
             return
         }
         addressMemory.set(id, network.value.signature, winner.url)
-        _state.update { it.copy(connections = it.connections + (id to ConnectionState.Connected(winner.url))) }
+        // The modules arrive with the address, so a source built for it is built once, complete.
+        val modules = discoveries[winner.url]?.let { found -> found.modules.keys.filter(found::has).toSet() }
+        _state.update {
+            it.copy(
+                connections = it.connections + (id to ConnectionState.Connected(winner.url)),
+                modules = if (modules != null) it.modules + (id to modules) else it.modules,
+            )
+        }
         val learned = record.learning(winner.addresses)
         val adopted = if (winner.serverIdentity != null && winner.serverIdentity != record.serverIdentity) learned.copy(serverIdentity = winner.serverIdentity) else learned
         if (adopted != record) {
@@ -520,8 +710,9 @@ class ServersModel(
         }
     }
 
-    private suspend fun check(url: String): AddressCheck? = withTimeoutOrNull(AddressRace.TIMEOUT_MS) {
+    private suspend fun check(url: String, discoveries: MutableMap<String, Discovery>): AddressCheck? = withTimeoutOrNull(AddressRace.TIMEOUT_MS) {
         val found = detector.discovery(url) ?: return@withTimeoutOrNull null
+        discoveries[url] = found
         AddressCheck(url, found.id, found.addresses.map { ServerAddress.of(it.url, AddressOrigin.SERVER, AddressScope.fromWire(it.scope)) })
     }
 
@@ -531,8 +722,26 @@ class ServersModel(
         _state.update { it.copy(checking = it.checking + id) }
         try {
             chooseAddress(id)
+            val kind = _state.value.server(id)?.kind
             val status = if (_state.value.connections[id] is ConnectionState.Unreachable) {
                 ConnectionCheck.Status.UNREACHABLE
+            } else if (kind == ServerKinds.AUDIOBOOKSHELF) {
+                try {
+                    audiobookshelf(id)?.absMe()
+                    ConnectionCheck.Status.OK
+                } catch (e: AudiobookshelfError) {
+                    val refused = e is AudiobookshelfError.SignedOut || e is AudiobookshelfError.InvalidCredentials || (e is AudiobookshelfError.Http && e.status == 401)
+                    if (refused) ConnectionCheck.Status.REJECTED else ConnectionCheck.Status.UNREACHABLE
+                }
+            } else if (kind == ServerKinds.GPODDER) {
+                try {
+                    gpodder(id)?.login()
+                    ConnectionCheck.Status.OK
+                } catch (e: GPodderException.Unauthorized) {
+                    ConnectionCheck.Status.REJECTED
+                } catch (e: GPodderException) {
+                    ConnectionCheck.Status.UNREACHABLE
+                }
             } else {
                 try {
                     client(id)?.me()
@@ -582,3 +791,22 @@ object TwoFactorNeeded : Exception("two-factor code needed") {
 internal fun Tokens.toStored() = StoredTokens(accessToken, refreshToken, expiresAt.toEpochMilli())
 
 internal fun StoredTokens.toTokens() = Tokens(access, refresh ?: "", Instant.ofEpochMilli(expiresAtEpochMs ?: 0))
+
+internal fun audio.own.kit.audiobookshelf.Tokens.toStored() =
+    StoredTokens(accessToken, refreshToken, expiresAtMillis.takeIf { it != audio.own.kit.audiobookshelf.Tokens.NEVER })
+
+internal fun StoredTokens.toAbsTokens() =
+    audio.own.kit.audiobookshelf.Tokens(access, refresh, expiresAtEpochMs ?: audio.own.kit.audiobookshelf.Tokens.NEVER)
+
+/** What the listener is told when a gPodder server refuses. */
+internal fun gpodderProblem(e: GPodderException): UserFacingException = UserFacingException(
+    when {
+        e is GPodderException.Unauthorized -> R.string.error_rejected
+        // podfetch's admin account may not sync.
+        e is GPodderException.Http && e.status == 409 -> AppR.string.error_podfetch_admin
+        e is GPodderException.Forbidden -> R.string.error_not_allowed
+        e is GPodderException.Network -> R.string.error_unreachable
+        else -> R.string.error_generic
+    },
+    e,
+)

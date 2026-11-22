@@ -323,6 +323,36 @@ class AudiobookshelfPodcastSourceTest {
     }
 
     @Test
+    fun `a file link lives as long as its token, and a refused one is renewed once`() = runBlocking {
+        val expires = 1_900_000_000_000L
+        val tokens = TokenSession(Tokens("old", "r1", expires))
+        val absClient = AudiobookshelfClient(server().host, tokens, AudiobookshelfHttp(OkHttpClient(), userAgent = "test"))
+        val abs = AudiobookshelfPodcastSource(absClient, ListeningStore(InMemoryValueStore()), FeedServer().loader, canAddShows = false)
+        val playback = abs.playback(EpisodeKey("show1", "ep1"))
+        assertTrue(playback.url.contains("token=old"))
+        assertEquals(Instant.ofEpochMilli(expires), playback.expiresAt)
+
+        var refreshes = 0
+        val renewing = ServerStub { request ->
+            if (request.url.encodedPath == "/auth/refresh") {
+                refreshes++
+                json("""{"user":{"id":"u1","username":"t","accessToken":"fresh","refreshToken":"r2"}}""")
+            } else {
+                status(404)
+            }
+        }
+        renewing.use {
+            val session = TokenSession(Tokens("old", "r1", expires))
+            val other = AudiobookshelfClient(renewing.url.toHttpUrl(), session, AudiobookshelfHttp(OkHttpClient(), userAgent = "test"))
+            val source = AudiobookshelfPodcastSource(other, ListeningStore(InMemoryValueStore()), FeedServer().loader, canAddShows = false)
+            source.renewAfterRefusal("${renewing.url}api/items/show1/file/101?token=old")
+            source.renewAfterRefusal("${renewing.url}api/items/show1/file/101?token=old")
+            assertEquals("fresh", session.current?.accessToken)
+            assertEquals("a second report of the same stale token is not a second refresh", 1, refreshes)
+        }
+    }
+
+    @Test
     fun `a refused token is a sign-in to do again, a missing show is not found`() = runBlocking {
         val stub = ServerStub { request -> if (request.url.encodedPath == "/api/libraries") status(401) else status(404) }
         stub.use {

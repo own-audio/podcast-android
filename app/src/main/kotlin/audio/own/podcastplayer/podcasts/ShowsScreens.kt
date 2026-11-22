@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RemoveCircleOutline
@@ -280,6 +281,9 @@ fun ShowContent(
     onRefresh: () -> Unit,
     onBack: () -> Unit,
     bottomBar: @Composable () -> Unit = {},
+    /** The show's owner on own.audio can share it with the family, or keep it to themselves. */
+    canShareWithFamily: Boolean = false,
+    onShareWithFamily: (Boolean) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val links = androidx.compose.ui.platform.LocalUriHandler.current
@@ -299,6 +303,14 @@ fun ShowContent(
                     DropdownMenuItem(text = { Text(stringResource(R.string.show_settings)) }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { open = false; onSettings() })
                     menu.website?.let { site ->
                         DropdownMenuItem(text = { Text(stringResource(R.string.website)) }, leadingIcon = { Icon(Icons.Filled.Language, null) }, onClick = { open = false; runCatching { links.openUri(site) } })
+                    }
+                    if (canShareWithFamily) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.share_with_the_family)) },
+                            leadingIcon = { Icon(Icons.Filled.Groups, null) },
+                            trailingIcon = { if (sharedWithFamily) Icon(Icons.Filled.Check, contentDescription = stringResource(SR.string.selected)) },
+                            onClick = { open = false; onShareWithFamily(!sharedWithFamily) },
+                        )
                     }
                     menu.feed?.let { feed ->
                         DropdownMenuItem(text = { Text(stringResource(R.string.share_feed)) }, leadingIcon = { Icon(Icons.Filled.Share, null) }, onClick = { open = false; onShareFeed(feed) })
@@ -324,6 +336,12 @@ fun ShowContent(
                                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                 show.show.author?.let { Text(Mojibake.repair(it), style = MaterialTheme.typography.bodyMedium, color = palette.muted) }
                                 SourceLabel(show.source, sourceName)
+                                if (sharedWithFamily) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Groups, contentDescription = null, tint = palette.muted, modifier = Modifier.size(14.dp))
+                                        Text(stringResource(SR.string.shared_with_family), style = MaterialTheme.typography.labelMedium, color = palette.muted)
+                                    }
+                                }
                             }
                         }
                         show.show.description?.takeIf { it.isNotBlank() }?.let { about ->
@@ -429,8 +447,9 @@ fun ShowSettingsContent(initial: ShowSettings, onCancel: () -> Unit, onDone: (Sh
     }
 }
 
+/** A switch row, as Settings and Show Settings draw them. */
 @Composable
-private fun SwitchLine(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun SwitchLine(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = Tokens.minTarget).clickable { onChange(!checked) }.padding(horizontal = Tokens.Spacing.lg, vertical = Tokens.Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -440,8 +459,9 @@ private fun SwitchLine(label: String, checked: Boolean, onChange: (Boolean) -> U
     }
 }
 
+/** A row whose value is picked from a menu of [choices]. */
 @Composable
-private fun <T> ChoiceLine(title: String, choices: List<T>, value: T, label: @Composable (T) -> String, onChoose: (T) -> Unit) {
+fun <T> ChoiceLine(title: String, choices: List<T>, value: T, label: @Composable (T) -> String, onChoose: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(

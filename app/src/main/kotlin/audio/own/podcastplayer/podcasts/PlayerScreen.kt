@@ -167,6 +167,8 @@ fun PlayerContent(
     onClose: () -> Unit,
     showOutput: Boolean = true,
     initialSheet: PlayerSheet? = null,
+    /** Settings' Play New Episodes After Up Next. */
+    playsOn: Boolean = true,
 ) {
     val palette = LocalPalette.current
     var sheet by remember { mutableStateOf(initialSheet) }
@@ -237,7 +239,7 @@ fun PlayerContent(
         PlayerSheet.SPEED -> SpeedSheet(player.rate, actions::setRate) { sheet = null }
         PlayerSheet.SLEEP -> SleepSheet(player, actions) { sheet = null }
         PlayerSheet.CHAPTERS -> ChaptersSheet(player, actions) { sheet = null }
-        PlayerSheet.UP_NEXT -> UpNextSheet(upNext, actions) { sheet = null }
+        PlayerSheet.UP_NEXT -> UpNextSheet(upNext, actions, playsOn) { sheet = null }
         null -> Unit
     }
 }
@@ -476,14 +478,14 @@ fun ChaptersBody(player: EpisodePlayer.State, actions: PlayerActions, onDismiss:
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UpNextSheet(entries: List<UpNext.Entry>, actions: PlayerActions, onDismiss: () -> Unit) {
+fun UpNextSheet(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boolean, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = AppBrand.radii.sheetTop, topEnd = AppBrand.radii.sheetTop)) {
-        UpNextBody(entries, actions, onDismiss)
+        UpNextBody(entries, actions, playsOn, onDismiss)
     }
 }
 
 @Composable
-fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, onDismiss: () -> Unit) {
+fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, playsOn: Boolean = true, onDismiss: () -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.padding(bottom = Tokens.Spacing.xl)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.xl), verticalAlignment = Alignment.CenterVertically) {
@@ -516,7 +518,7 @@ fun UpNextBody(entries: List<UpNext.Entry>, actions: PlayerActions, onDismiss: (
                     }
                 }
             }
-            if (PodcastModel.CONTINUE_WITH_NEW_EPISODES) {
+            if (playsOn) {
                 Text(stringResource(R.string.then_new_episodes), style = MaterialTheme.typography.bodySmall, color = palette.muted, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm))
             }
         }

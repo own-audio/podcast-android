@@ -6,10 +6,22 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import audio.own.core.servers.NetworkState
+import audio.own.core.servers.ServerLibraryRef
 import audio.own.core.servers.ServerRecord
+import audio.own.kit.audiobookshelf.AudiobookshelfClient
+import audio.own.kit.audiobookshelf.DeviceInfo
+import audio.own.kit.gpodder.GPodderClient
+import audio.own.kit.gpodder.GPodderException
+import audio.own.kit.ownaudio.SettingsPatch
+import audio.own.kit.ownaudio.updateSettings as updateAccountSettings
+import audio.own.player.core.SkipIntervals
+import audio.own.player.spoken.SmartRewind
+import audio.own.podcast.library.AudiobookshelfPodcastSource
+import audio.own.podcast.library.FeedLoader
+import audio.own.podcast.library.GPodderSync
+import audio.own.podcast.library.GPodderSyncState
 import audio.own.kit.feed.FeedFetcher
 import audio.own.kit.ownaudio.OwnAudioClient
-import audio.own.kit.ownaudio.discover
 import audio.own.player.core.PlaybackLink
 import audio.own.player.core.PlaybackLinkRequest
 import audio.own.player.core.PlaybackLinkResolver
@@ -50,6 +62,10 @@ import audio.own.podcast.library.room.RoomValueStore
 import audio.own.podcastplayer.R
 import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.AppPreferences
+import audio.own.podcastplayer.app.PlaybackSettings
+import audio.own.podcastplayer.app.UserFacingException
+import audio.own.podcastplayer.playback.KeepAheadLoadControl
+import audio.own.podcastplayer.servers.gpodderProblem
 import audio.own.podcastplayer.app.UiText
 import audio.own.podcastplayer.playback.EpisodePlayer
 import audio.own.podcastplayer.playback.HttpRangeReader
@@ -66,6 +82,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,6 +110,32 @@ data class Suggestion(val show: ShowSearchResult, val because: String)
 
 enum class OfflineReason { CHOSEN, NO_NETWORK }
 
+/** Whether a show of own.audio may be shared with the family here (only by its owner), and whether it is. */
+data class FamilySharing(val canChange: Boolean, val shared: Boolean)
+
+/**
+ * The servers' clients and the few things the model tells the servers model, for the kinds
+ * beyond own.audio; [None] for a model with own.audio and feeds only.
+ */
+interface ServerAccounts {
+    fun audiobookshelf(serverId: String): AudiobookshelfClient? = null
+
+    fun gpodder(serverId: String): GPodderClient? = null
+
+    /** The address requests go to now, so a source is told when it changes. */
+    fun address(serverId: String): String? = null
+
+    suspend fun gpodderDevice(): String = "own-audio-podcasts"
+
+    suspend fun noteSynced(serverId: String, atEpochMs: Long) {}
+
+    suspend fun updateLibraries(serverId: String, libraries: List<ServerLibraryRef>) {}
+
+    companion object {
+        val None = object : ServerAccounts {}
+    }
+}
+
 data class PodcastState(
     val loaded: Boolean = false,
     val shows: List<SourcedShow> = emptyList(),
@@ -117,6 +160,11 @@ data class PodcastState(
     val error: UiText? = null,
     /** A feed address a link handed over, for Add a Show. */
     val pendingFeedAddress: String? = null,
+    /** Each gPodder account's shows as of its last sync: the device's shows it holds. */
+    val accountFeeds: Map<String, Set<String>> = emptyMap(),
+    /** gPodder accounts syncing now. */
+    val syncing: Set<String> = emptySet(),
+    val settings: PlaybackSettings = PlaybackSettings(),
 ) {
     private val showsByKey: Map<String, Show> by lazy { shows.associate { "${it.source.id}/${it.show.id}" to it.show } }
 
@@ -140,8 +188,10 @@ data class PodcastState(
         ?: followTargets.firstOrNull { it.ref == ref }?.name
         ?: ""
 
-    private fun matches(source: SourceRef, show: Show?, active: SourceRef): Boolean = when (active) {
-        is SourceRef.Library -> source == SourceRef.Server(active.uuid) && show?.collection == active.libraryId
+    private fun matches(source: SourceRef, show: Show?, active: SourceRef): Boolean = when {
+        active is SourceRef.Library -> source == SourceRef.Server(active.uuid) && show?.collection == active.libraryId
+        // A gPodder account holds no library of its own: its choice is the device's shows on the account.
+        active.id in accountFeeds -> source == SourceRef.Phone && show?.feedUrl?.let { it in accountFeeds[active.id].orEmpty() } == true
         else -> source == active
     }
 }
@@ -177,6 +227,12 @@ class PodcastModel(
     private val scope: CoroutineScope,
     private val now: () -> Instant = Instant::now,
     private val country: String? = Locale.getDefault().country,
+    private val accounts: ServerAccounts = ServerAccounts.None,
+    /** Drops the player's held link for an episode, so the next open asks the source again. */
+    private val forgetLink: (String) -> Unit = {},
+    /** What Audiobookshelf's sessions show for this device. */
+    private val absDevice: DeviceInfo = DeviceInfo("own-audio-podcasts", "own.audio Podcasts", "1", "", ""),
+    private val syncDelayMs: Long = SYNC_DELAY_MS,
 ) {
     /** The few words the model itself names (the device as a source, a removed server). */
     interface Strings {
@@ -195,11 +251,17 @@ class PodcastModel(
     val state: StateFlow<PodcastState> = _state.asStateFlow()
 
     private val ownAudio = MutableStateFlow<Map<String, OwnAudioPodcastSource>>(emptyMap())
+    private var shelves: Map<String, AudiobookshelfPodcastSource> = emptyMap()
+    private var syncs: Map<String, GPodderSync> = emptyMap()
     private val listeningStores = HashMap<String, ListeningStore>()
     private val catalogueStores = HashMap<String, RoomOwnAudioCatalogueStore>()
-    private val sourceKeys = HashMap<String, String>()
-    private val modules = HashMap<String, Set<String>>()
+    /** The address each source's client was made for: a new one restarts the live updates. */
+    private val sourceAddresses = HashMap<String, String?>()
+    private val librariesRead = HashSet<String>()
     private var knownServers: Set<String>? = null
+    private var settings = PlaybackSettings()
+    private var syncJob: Job? = null
+    private val refusedOnce = HashSet<String>()
     private val throttle = PositionThrottle()
     private var lastRefreshAt: Instant? = null
     private val refreshLock = Mutex()
@@ -217,6 +279,8 @@ class PodcastModel(
                 forgetLastPlayed()
                 if (playOn) scope.launch { playOn(after = id) }
             }
+
+            override fun onRefused(id: String, url: String) = refused(id, url)
         }
     }
 
@@ -227,7 +291,10 @@ class PodcastModel(
         if (_state.value.loaded) return
         val upNextList = upNext.all()
         val active = preferences.activeSource.first()
+        applySettings(preferences.playback.first())
         _state.update { it.copy(upNext = upNextList, activeSource = active, offline = offlineReason()) }
+        scope.launch { preferences.playback.drop(1).collect { applySettings(it) } }
+        scope.launch { network.map { it.dataSaver }.distinctUntilChanged().drop(1).collect { applySettings(settings) } }
         servers.first { it.loaded }
         rebuildSources(servers.value)
         reloadLists()
@@ -269,60 +336,125 @@ class PodcastModel(
     private val isOffline: Boolean get() = offlineReason() != null
 
     /**
-     * One own.audio source per signed-in own.audio server, at the address in use. The device's
-     * catalogue and listening state of each server outlive the source object, which is made again
-     * when the address changes.
+     * One source per signed-in own.audio and Audiobookshelf server, and one sync per gPodder
+     * account, each made once for the life of the process: a new address or sign-in only gives
+     * it a new client, so a first catalogue snapshot is never taken twice. The device's catalogue
+     * and listening state of each server outlive the source object.
      */
     private suspend fun rebuildSources(state: ServersState) {
         if (!state.loaded) return
         val ids = state.servers.map { it.id }.toSet()
         knownServers?.let { before -> (before - ids).forEach { forgetServer(it) } }
         knownServers = ids
-        val next = LinkedHashMap<String, OwnAudioPodcastSource>()
+        var moved = false
+        val nextOwnAudio = LinkedHashMap<String, OwnAudioPodcastSource>()
+        val nextShelves = LinkedHashMap<String, AudiobookshelfPodcastSource>()
+        val nextSyncs = LinkedHashMap<String, GPodderSync>()
+        val newSyncs = mutableListOf<String>()
         for (record in ordered(state.servers)) {
-            if (record.kind != ServerKinds.OWN_AUDIO) continue
-            val key = "${state.connections[record.id]}|${record.connection}|${modules[record.id]}"
-            val held = ownAudio.value[record.id]
-            if (held != null && sourceKeys[record.id] == key) {
-                next[record.id] = held
-                continue
+            val address = accounts.address(record.id) ?: state.connections[record.id]?.let { (it as? audio.own.podcastplayer.servers.ConnectionState.Connected)?.url }
+            if (sourceAddresses[record.id] != address) moved = moved || record.id in sourceAddresses
+            when (record.kind) {
+                ServerKinds.OWN_AUDIO -> {
+                    val client = client(record.id) ?: continue
+                    val modules = state.modules[record.id]
+                    val held = ownAudio.value[record.id]
+                    if (held != null) {
+                        held.client = client
+                        if (modules != null) held.modules = modules
+                        nextOwnAudio[record.id] = held
+                    } else {
+                        val catalogue = catalogueStores.getOrPut(record.id) { RoomOwnAudioCatalogueStore(db, record.id) }
+                        nextOwnAudio[record.id] = OwnAudioPodcastSource(client, listening(record.id), catalogue, modules.orEmpty(), now)
+                    }
+                }
+                ServerKinds.AUDIOBOOKSHELF -> {
+                    val client = accounts.audiobookshelf(record.id) ?: continue
+                    val canAdd = state.extras(record.id).canAddShows
+                    val held = shelves[record.id]
+                    if (held != null) {
+                        held.client = client
+                        held.canAddShows = canAdd
+                        nextShelves[record.id] = held
+                    } else {
+                        nextShelves[record.id] = AudiobookshelfPodcastSource(client, listening(record.id), FeedLoader { url, validators -> feeds.fetch(url, validators) }, canAdd, absDevice, now = now)
+                    }
+                    if (librariesRead.add(record.id)) scope.launch { readLibraries(record.id) }
+                }
+                ServerKinds.GPODDER -> {
+                    val client = accounts.gpodder(record.id) ?: continue
+                    val held = syncs[record.id]
+                    if (held != null && sourceAddresses[record.id] == address && (record.auth as? audio.own.core.servers.ServerAuth.GPodder)?.password == passwords[record.id]) {
+                        nextSyncs[record.id] = held
+                    } else {
+                        val device = (record.auth as? audio.own.core.servers.ServerAuth.GPodder)?.deviceId ?: accounts.gpodderDevice()
+                        nextSyncs[record.id] = GPodderSync(client, phone, device, RoomValueStore(db, "${record.id}/gpodder-$device", GPodderSyncState.serializer()))
+                        passwords[record.id] = (record.auth as? audio.own.core.servers.ServerAuth.GPodder)?.password
+                        if (held == null) newSyncs += record.id
+                    }
+                }
             }
-            val client = client(record.id) ?: continue
-            val listening = listeningStores.getOrPut(record.id) { ListeningStore(RoomValueStore(db, "${record.id}/listening", ListeningState.serializer()), now) }
-            val catalogue = catalogueStores.getOrPut(record.id) { RoomOwnAudioCatalogueStore(db, record.id) }
-            next[record.id] = OwnAudioPodcastSource(client, listening, catalogue, modules[record.id].orEmpty(), now)
-            sourceKeys[record.id] = key
-            if (record.id !in modules) scope.launch { learnModules(record.id, client) }
+            sourceAddresses[record.id] = address
         }
-        ownAudio.value = next
+        ownAudio.value = nextOwnAudio
+        shelves = nextShelves
+        syncs = nextSyncs
         _state.update { it.copy(sources = switchable(state), followTargets = followTargets(state), catalogueServer = catalogueServer(state)) }
-        if (_state.value.loaded) {
-            followLiveUpdates()
-            reloadLists()
+        // A library turned off, or a server gone, that the switch was on: everything again.
+        val active = _state.value.activeSource
+        if (_state.value.loaded && active != null && _state.value.sources.none { it.ref.id == active }) {
+            val server = (SourceRef.parse(active) as? SourceRef.Library)?.let { SourceRef.Server(it.uuid) }
+            setActiveSource(server?.takeIf { ref -> _state.value.sources.any { it.ref == ref } }?.id)
         }
+        // A check of the connection or a sync's time changes the servers' state without changing
+        // what the lists hold: only a change of source, address, sign-in or library reads them again.
+        val signature = ordered(state.servers).map { record ->
+            listOf(record.id, sourceAddresses[record.id], record.auth.isSignedIn, record.libraries, state.extras(record.id).hiddenLibraries, state.modules[record.id])
+        }
+        val changed = signature != listsSignature
+        listsSignature = signature
+        if (_state.value.loaded) {
+            if (moved || newSyncs.isNotEmpty()) followLiveUpdates()
+            if (changed) reloadLists()
+            // An account just added: its first sync now, so the device's shows reach it.
+            newSyncs.forEach { id -> scope.launch { runCatching { sync(id) } } }
+        }
+        if (newSyncs.isNotEmpty() || _state.value.accountFeeds.keys.any { it !in nextSyncs }) noteAccountFeeds()
     }
 
-    /** Which modules a server has on (its directory is one); the source is made again with them. */
-    private suspend fun learnModules(serverId: String, client: OwnAudioClient) {
-        val discovery = try {
-            client.discover()
+    private val passwords = HashMap<String, String?>()
+    private var listsSignature: List<List<Any?>>? = null
+
+    private fun listening(serverId: String) =
+        listeningStores.getOrPut(serverId) { ListeningStore(RoomValueStore(db, "$serverId/listening", ListeningState.serializer()), now) }
+
+    /** The podcast libraries an Audiobookshelf server has now, for the server page and the switch. */
+    private suspend fun readLibraries(serverId: String) {
+        val source = shelves[serverId] ?: return
+        val found = try {
+            source.podcastLibraries()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
+            librariesRead.remove(serverId)
             return
         }
-        modules[serverId] = discovery.modules.keys.filter(discovery::has).toSet()
-        rebuildSources(servers.value)
+        accounts.updateLibraries(serverId, found.map { ServerLibraryRef(it.id, it.name) })
     }
 
     private suspend fun forgetServer(serverId: String) {
         log.info("podcasts", "forgetting a removed server's shows")
         if (player.state.value.item?.source?.serverId?.toString() == serverId) stopPlayback()
         ownAudio.update { it - serverId }
+        shelves = shelves - serverId
+        // A gPodder account's shows are the device's: they stay, no longer kept in step.
+        syncs[serverId]?.let { syncs = syncs - serverId }
+        _state.update { it.copy(accountFeeds = it.accountFeeds - serverId) }
         listeningStores.remove(serverId)
         catalogueStores.remove(serverId)
-        modules.remove(serverId)
-        sourceKeys.remove(serverId)
+        sourceAddresses.remove(serverId)
+        librariesRead.remove(serverId)
+        passwords.remove(serverId)
         db.forgetServer(serverId)
         pending.removeAll("$serverId/")
         upNext.removeAll { it.source == serverId }
@@ -342,17 +474,41 @@ class PodcastModel(
 
     private fun info(record: ServerRecord) = SourceInfo(SourceRef.Server(java.util.UUID.fromString(record.id)), record.displayName, record.kind)
 
-    /** own.audio first, always; then this device; then the other servers with a library of their own. */
+    /**
+     * own.audio first, always; then this device; then Audiobookshelf and the gPodder accounts. A
+     * server with several libraries shown offers each one after itself.
+     */
     private fun switchable(state: ServersState): List<SourceInfo> {
-        val records = ordered(state.servers).filter { it.id in ownAudio.value }
+        val records = ordered(state.servers).filter { it.id in ownAudio.value || it.id in shelves || it.id in syncs }
         val phone = SourceInfo(SourceRef.Phone, strings.thisDevice, null)
-        return records.filter { it.kind == ServerKinds.OWN_AUDIO }.map(::info) + phone + records.filter { it.kind != ServerKinds.OWN_AUDIO }.map(::info)
+        return records.filter { it.kind == ServerKinds.OWN_AUDIO }.map(::info) + phone + records.filter { it.kind != ServerKinds.OWN_AUDIO }.flatMap { entries(it, state) }
     }
 
-    /** Where shows can be followed: the device always, and every server that takes a feed address. */
+    private fun entries(record: ServerRecord, state: ServersState): List<SourceInfo> {
+        val libraries = visibleLibraries(record, state)
+        val uuid = java.util.UUID.fromString(record.id)
+        return listOf(info(record)) + if (libraries.size > 1) libraries.map { SourceInfo(SourceRef.Library(uuid, it.id), it.name, record.kind) } else emptyList()
+    }
+
+    private fun visibleLibraries(record: ServerRecord, state: ServersState): List<ServerLibraryRef> {
+        val hidden = state.extras(record.id).hiddenLibraries
+        return record.libraries.orEmpty().filter { it.id !in hidden }
+    }
+
+    /**
+     * Where shows can be followed: the device always, and every server that takes a feed
+     * address; an Audiobookshelf server with several libraries shown, each of them.
+     */
     private fun followTargets(state: ServersState): List<SourceInfo> =
         listOf(SourceInfo(SourceRef.Phone, strings.thisDevice, null)) +
-            ordered(state.servers).filter { ownAudio.value[it.id]?.capabilities?.contains(Capability.ADD_BY_URL) == true }.map(::info)
+            ordered(state.servers).filter { source(SourceRef.Server(java.util.UUID.fromString(it.id)))?.capabilities?.contains(Capability.ADD_BY_URL) == true }.flatMap { record ->
+                val libraries = visibleLibraries(record, state)
+                if (record.kind == ServerKinds.AUDIOBOOKSHELF && libraries.size > 1) {
+                    libraries.map { SourceInfo(SourceRef.Library(java.util.UUID.fromString(record.id), it.id), "${record.displayName} · ${it.name}", record.kind) }
+                } else {
+                    listOf(info(record))
+                }
+            }
 
     /** The first own.audio server whose directory can be browsed. */
     private fun catalogueServer(state: ServersState): String? =
@@ -360,9 +516,11 @@ class PodcastModel(
 
     fun source(ref: SourceRef): PodcastSource? = when (ref) {
         SourceRef.Phone -> phone
-        is SourceRef.Server -> ownAudio.value[ref.id]
-        is SourceRef.Library -> ownAudio.value[ref.uuid.toString()]
+        is SourceRef.Server -> ownAudio.value[ref.id] ?: shelves[ref.id]
+        is SourceRef.Library -> ownAudio.value[ref.uuid.toString()] ?: shelves[ref.uuid.toString()]
     }
+
+    private fun shelf(ref: SourceRef): AudiobookshelfPodcastSource? = ref.serverId?.let { shelves[it.toString()] }
 
     private fun ownAudioSource(ref: SourceRef): OwnAudioPodcastSource? = ref.serverId?.let { ownAudio.value[it.toString()] }
 
@@ -379,13 +537,17 @@ class PodcastModel(
     suspend fun reloadLists() {
         val refs = buildList {
             add(SourceRef.Phone)
-            if (!isOffline) ownAudio.value.keys.forEach { add(SourceRef.Server(java.util.UUID.fromString(it))) }
+            if (!isOffline) (ownAudio.value.keys + shelves.keys).forEach { add(SourceRef.Server(java.util.UUID.fromString(it))) }
         }
         val answers = coroutineScopeAll(refs) { ref ->
             val source = source(ref) ?: return@coroutineScopeAll null
             try {
-                val shows = source.shows().map { SourcedShow(ref, it) }
-                val inbox = source.inbox(Inbox.LIMIT).map { SourcedEpisode(ref, it) }
+                // A library turned off on the server page leaves the lists.
+                val hidden = ref.serverId?.let { servers.value.extras(it.toString()).hiddenLibraries }.orEmpty()
+                val kept = source.shows().filter { show -> show.collection?.let { it !in hidden } ?: true }
+                val keptIds = kept.map { it.id }.toSet()
+                val shows = kept.map { SourcedShow(ref, it) }
+                val inbox = source.inbox(Inbox.LIMIT).filter { hidden.isEmpty() || it.showId in keptIds }.map { SourcedEpisode(ref, it) }
                 val progress = source.allProgress().mapKeys { (key, _) -> SourcedEpisode.id(ref, key) }
                 Triple(shows, inbox, progress)
             } catch (error: CancellationException) {
@@ -432,8 +594,17 @@ class PodcastModel(
             lastRefreshAt = now()
             _state.update { it.copy(refreshing = true) }
             sendPendingProgress()
+            for (id in syncs.keys) {
+                try {
+                    sync(id, reload = false)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    log.error("gpodder", "sync failed: ${error.javaClass.simpleName}")
+                }
+            }
             phone.refresh(null, asked)
-            ownAudio.value.values.forEach { source ->
+            (ownAudio.value.values + shelves.values).forEach { source ->
                 try {
                     source.refresh(null, asked)
                 } catch (error: CancellationException) {
@@ -468,7 +639,9 @@ class PodcastModel(
     /** Follows the feed at [feedUrl] on [target]; the device when nothing else is chosen. */
     suspend fun follow(feedUrl: String, target: SourceRef = SourceRef.Phone): SourcedShow {
         val source = source(target) ?: throw SourceException.NotFound()
-        val show = source.follow(feedUrl)
+        val shelf = shelf(target)
+        val show = if (target is SourceRef.Library && shelf != null) shelf.follow(feedUrl, target.libraryId) else source.follow(feedUrl)
+        if (target == SourceRef.Phone) scheduleSync()
         reloadLists()
         val ref = target.serverId?.let { SourceRef.Server(it) } ?: SourceRef.Phone
         return _state.value.shows.firstOrNull { it.source == ref && it.show.id == show.id } ?: SourcedShow(ref, show)
@@ -479,6 +652,7 @@ class PodcastModel(
         val current = player.state.value.item
         if (current?.source == show.source && current.episode.showId == show.show.id) stopPlayback()
         upNext.removeAll { it.source == show.source.id && it.episode.showId == show.show.id }
+        if (show.source == SourceRef.Phone) scheduleSync()
         _state.update { state ->
             state.copy(
                 shows = state.shows.filterNot { it.id == show.id },
@@ -502,6 +676,24 @@ class PodcastModel(
     /** Whether unfollowing takes the show away from the family too (own.audio). */
     suspend fun isSharedWithFamily(show: SourcedShow): Boolean = ownAudioSource(show.source)?.isSharedWithFamily(show.show.id) == true
 
+    /**
+     * Whether the show is shared with the family, and whether this account may change that: only
+     * the account that follows it for the household (the record's owner) can. Null outside own.audio.
+     */
+    suspend fun familySharing(show: SourcedShow): FamilySharing? {
+        val source = ownAudioSource(show.source) ?: return null
+        val me = show.source.serverId?.let { servers.value.server(it.toString())?.userId }
+        val owner = source.owner(show.show.id)
+        return FamilySharing(canChange = me != null && owner == me, shared = source.isSharedWithFamily(show.show.id))
+    }
+
+    /** Shares the show with the family, or keeps it to its owner; [after] gets what the server holds. */
+    fun setSharedWithFamily(show: SourcedShow, shared: Boolean, after: (Boolean) -> Unit = {}) = perform {
+        val source = ownAudioSource(show.source) ?: return@perform
+        source.setSharedWithFamily(show.show.id, shared)
+        after(source.isSharedWithFamily(show.show.id))
+    }
+
     // endregion
 
     // region Episodes
@@ -516,6 +708,7 @@ class PodcastModel(
         val value = ListeningProgress(if (played) held?.positionMs ?: 0 else 0, played, now())
         if (item.source == SourceRef.Phone) {
             phone.markPlayed(item.episode.key, played)
+            scheduleSync()
         } else {
             // Through the queue, so marking works offline too.
             send(value, item.id)
@@ -528,8 +721,14 @@ class PodcastModel(
         }
     }
 
-    /** Offline, only what the listening cache holds whole can play. */
-    fun canPlay(item: SourcedEpisode): Boolean = !isOffline || isFullyCached(item.id)
+    /**
+     * Offline, only what the listening cache holds whole can play; on mobile data with Downloaded
+     * Only, the same.
+     */
+    fun canPlay(item: SourcedEpisode): Boolean = (!isOffline && !onlyDownloaded) || isFullyCached(item.id)
+
+    private val onlyDownloaded: Boolean
+        get() = settings.mobileData == PlaybackSettings.MobileData.DOWNLOADED_ONLY && network.value.connected && network.value.metered
 
     // endregion
 
@@ -565,10 +764,11 @@ class PodcastModel(
         val skip = show?.settings?.skipIntroSecs ?: 0.0
         if (start == 0L && skip > 0) start = (skip * 1000).toLong()
         if (!canPlay(item)) {
-            if (!quietly) fail(UiText(R.string.error_cant_play))
+            if (!quietly) fail(UiText(if (isOffline) R.string.error_cant_play else R.string.error_mobile_data))
             return
         }
-        player.load(item, show, start, autoplay, show?.settings?.speed ?: DEFAULT_RATE)
+        refusedOnce.remove(item.id)
+        player.load(item, show, start, autoplay, show?.settings?.speed ?: settings.defaultRate)
         saveLastPlayed(item, show, start, now())
         loadChapters(item)
     }
@@ -643,7 +843,34 @@ class PodcastModel(
         val (ref, key) = SourcedEpisode.parse(request.mediaId) ?: throw SourceException.NotFound()
         if (offlineMode()) throw SourceException.Network()
         val source = source(ref) ?: throw SourceException.NotFound()
-        PlaybackLink(source.playback(key).url)
+        val playback = source.playback(key)
+        // The player asks again a little before a signed link or a token in it runs out.
+        PlaybackLink(playback.url, playback.expiresAt?.toEpochMilli())
+    }
+
+    /**
+     * Audiobookshelf refused the token in an episode's link: one fresh token, then the episode
+     * opens again where it was. A second refusal stays an error.
+     */
+    private fun refused(id: String, url: String) {
+        val (ref, _) = SourcedEpisode.parse(id) ?: return
+        val shelf = shelf(ref)
+        if (shelf == null || !refusedOnce.add(id)) {
+            fail(UiText(R.string.error_cant_play))
+            return
+        }
+        scope.launch {
+            try {
+                shelf.renewAfterRefusal(url)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                fail(message(error))
+                return@launch
+            }
+            forgetLink(id)
+            player.retry()
+        }
     }
 
     private fun positionReported(report: EpisodePlayer.Report) {
@@ -665,6 +892,8 @@ class PodcastModel(
         if (throttle.isDue(report.reason == EpisodePlayer.Reason.PERIODIC, report.id, played, report.at.toEpochMilli())) {
             storeProgress(value, report.id)
         }
+        // A device episode paused, stopped or finished: the gPodder accounts hear of it shortly.
+        if (ref == SourceRef.Phone && report.reason in SYNCING_REASONS) scheduleSync()
     }
 
     /** Into the source's store: the device's database, or a server's queue and then the server. */
@@ -751,7 +980,7 @@ class PodcastModel(
             storeProgress(missed, item.id)
         }
         val show = _state.value.show(item) ?: last.show
-        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: DEFAULT_RATE, prepare = false)
+        player.load(item, show, last.positionMs, autoplay = false, rate = show?.settings?.speed ?: settings.defaultRate, prepare = false)
         loadChapters(item, networkAllowed = false)
     }
 
@@ -813,7 +1042,7 @@ class PodcastModel(
             finished = after,
             upNext = upNext,
             inbox = state.inbox,
-            continueWithNewEpisodes = CONTINUE_WITH_NEW_EPISODES,
+            continueWithNewEpisodes = settings.continueWithNewEpisodes,
             canPlay = ::canPlay,
             isPlayed = { state.progress[it.id]?.played == true },
             shows = { state.show(it) },
@@ -835,6 +1064,90 @@ class PodcastModel(
         if (result.toQueue.isEmpty()) return
         result.toQueue.forEach { upNext.playLater(UpNext.Entry(it.id, it.source.id, it.episode, state.show(it))) }
         _state.update { it.copy(upNext = upNext.all()) }
+    }
+
+    // endregion
+
+    // region gPodder sync
+
+    /**
+     * After the device's shows or positions changed: one sync of each gPodder account a few
+     * seconds later, however many changes come in between.
+     */
+    private fun scheduleSync() {
+        if (syncs.isEmpty() || isOffline) return
+        syncJob?.cancel()
+        syncJob = scope.launch {
+            delay(syncDelayMs)
+            for (id in syncs.keys) runCatching { sync(id) }.onFailure { if (it is CancellationException) throw it }
+        }
+    }
+
+    /** Sync Now on the server page; the listener reads why it failed. */
+    suspend fun syncNow(serverId: String) {
+        try {
+            sync(serverId)
+        } catch (error: GPodderException) {
+            throw gpodderProblem(error)
+        }
+    }
+
+    private suspend fun sync(serverId: String, reload: Boolean = true) {
+        val sync = syncs[serverId] ?: return
+        if (isOffline) return
+        _state.update { it.copy(syncing = it.syncing + serverId) }
+        try {
+            val report = sync.sync()
+            accounts.noteSynced(serverId, now().toEpochMilli())
+            val feeds = sync.accountFeeds()
+            _state.update { it.copy(accountFeeds = it.accountFeeds + (serverId to feeds)) }
+            val changed = report.followed + report.unfollowed + report.positionsApplied > 0
+            if (changed) log.info("gpodder", "synced: ${report.followed} followed, ${report.unfollowed} unfollowed, ${report.positionsApplied} positions")
+            if (reload && changed) reloadLists()
+        } finally {
+            _state.update { it.copy(syncing = it.syncing - serverId) }
+        }
+    }
+
+    private suspend fun noteAccountFeeds() {
+        val feeds = syncs.mapValues { (_, sync) -> runCatching { sync.accountFeeds() }.getOrDefault(emptySet()) }
+        _state.update { it.copy(accountFeeds = feeds) }
+    }
+
+    // endregion
+
+    // region Settings
+
+    /** The listener changed a playback setting: kept, applied, and the speed told to own.audio. */
+    fun setPlaybackSettings(next: PlaybackSettings) {
+        val before = settings
+        applySettings(next)
+        scope.launch {
+            preferences.setPlayback(next)
+            if (next.defaultRate != before.defaultRate) saveSpeedOnServers(next.defaultRate)
+        }
+    }
+
+    /** The account's default speed on every own.audio server; the skip intervals stay on the device. */
+    private suspend fun saveSpeedOnServers(rate: Float) {
+        for (record in servers.value.servers.filter { it.kind == ServerKinds.OWN_AUDIO }) {
+            val client = client(record.id) ?: continue
+            try {
+                client.updateAccountSettings(SettingsPatch(playback = SettingsPatch.Playback(speed = rate.toDouble())))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log.error("podcasts", "the default speed didn't reach a server: ${error.javaClass.simpleName}")
+            }
+        }
+    }
+
+    private fun applySettings(next: PlaybackSettings) {
+        settings = next
+        player.setSkipIntervals(SkipIntervals(next.skipBackSecs, next.skipForwardSecs))
+        player.smartRewind = SmartRewind(next.smartRewind)
+        player.setKeepAhead(KeepAheadLoadControl.windowMs(next.keepAheadMinutes(network.value.dataSaver)))
+        _state.update { it.copy(settings = next) }
     }
 
     // endregion
@@ -944,8 +1257,9 @@ class PodcastModel(
         const val REMOTE_POSITION_TIMEOUT_MS = 4_000L
         const val MAX_SUGGESTIONS = 20
 
-        /** Settings' Play New Episodes After Up Next comes with P9; on, as its default. */
-        const val CONTINUE_WITH_NEW_EPISODES = true
+        /** How long after a change on the device the gPodder accounts are synced. */
+        const val SYNC_DELAY_MS = 5_000L
+        private val SYNCING_REASONS = setOf(EpisodePlayer.Reason.PAUSE, EpisodePlayer.Reason.STOP, EpisodePlayer.Reason.FINISHED)
         val MIN_REFRESH_INTERVAL: Duration = Duration.ofMinutes(15)
 
         /** What the listener is told when something fails. */
@@ -954,6 +1268,7 @@ class PodcastModel(
             is SourceException.SignInRejected -> UiText(R.string.error_signed_out)
             is SourceException.Network -> UiText(R.string.error_cant_reach)
             is SourceException.NotFound -> UiText(R.string.error_episode_gone)
+            is UserFacingException -> error.text
             else -> UiText(R.string.error_something)
         }
     }

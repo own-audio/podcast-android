@@ -52,6 +52,13 @@ import audio.own.podcastplayer.playback.Artwork
 import audio.own.podcastplayer.playback.EpisodePlayer
 import audio.own.podcastplayer.podcasts.PodcastModel
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import audio.own.core.servers.ServerLibraryRef
+import audio.own.kit.audiobookshelf.DeviceInfo
+import audio.own.podcastplayer.podcasts.ServerAccounts
+import audio.own.podcastplayer.servers.ServerIcons
 import kotlinx.serialization.builtins.ListSerializer
 
 /**
@@ -175,7 +182,45 @@ class AppContainer(context: Context) {
             },
             log = log,
             scope = mainScope,
+            accounts = object : ServerAccounts {
+                override fun audiobookshelf(serverId: String) = servers.audiobookshelf(serverId)
+
+                override fun gpodder(serverId: String) = servers.gpodder(serverId)
+
+                override fun address(serverId: String) = servers.address(serverId)
+
+                override suspend fun gpodderDevice() = servers.gpodderDevice()
+
+                override suspend fun noteSynced(serverId: String, atEpochMs: Long) = servers.noteSynced(serverId, atEpochMs)
+
+                override suspend fun updateLibraries(serverId: String, libraries: List<ServerLibraryRef>) = servers.updateLibraries(serverId, libraries)
+            },
+            forgetLink = { id -> playbackSources.links.forget(PlaybackLinkRequest(id)) },
+            absDevice = DeviceInfo(
+                deviceId = "own-audio-podcasts-android",
+                clientName = "own.audio Podcasts",
+                clientVersion = versionName,
+                manufacturer = Build.MANUFACTURER,
+                model = Build.MODEL,
+                sdkVersion = Build.VERSION.SDK_INT.toString(),
+            ),
         )
+    }
+
+    /** Audiobookshelf's and gPodder servers' own icons, fetched from them and kept on the device. */
+    val serverIcons = ServerIcons(File(app.filesDir, "server-icons"), http, userAgent, log)
+
+    /** Fetches the icons once the servers are known, and drops a removed server's. */
+    fun loadServerIcons() {
+        scope.launch {
+            var known = emptySet<String>()
+            servers.state.map { it.servers to it.extras }.distinctUntilChanged().collect { (records, extras) ->
+                if (!servers.state.value.loaded) return@collect
+                (known - records.map { it.id }.toSet()).forEach(serverIcons::forget)
+                known = records.map { it.id }.toSet()
+                serverIcons.load(records, extras, { record -> servers.address(record.id) }, online = network.state.value.connected && !offline.isOffline)
+            }
+        }
     }
 
     /** The header of a shared log: which app, which system. */

@@ -17,19 +17,24 @@ data class ServerDetailState(
     /** The server's version from its discovery, once it answered. */
     val version: String? = null,
     val deleting: Boolean = false,
+    val syncing: Boolean = false,
     val error: UiText? = null,
     val addressError: UiText? = null,
     /** Removed or deleted: the page closes. */
     val gone: Boolean = false,
 )
 
-/** One server's page: its connection, account, name, addresses, and removing it. */
+/** One server's page: its connection, account, name, libraries, sync, addresses, and removing it. */
 class ServerDetailViewModel(
     val serverId: String,
     private val servers: ServersModel,
     private val detector: ServerDetector,
     private val log: AppLog,
     private val isOffline: () -> Boolean = { false },
+    /** A gPodder account's sync, now. */
+    private val sync: suspend (String) -> Unit = {},
+    /** A library turned on or off leaves or rejoins the lists. */
+    private val librariesChanged: () -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(ServerDetailState())
     val state: StateFlow<ServerDetailState> = _state.asStateFlow()
@@ -38,16 +43,40 @@ class ServerDetailViewModel(
     init {
         viewModelScope.launch {
             val record = servers.state.value.server(serverId) ?: return@launch
-            if (record.kind == ServerKinds.OWN_AUDIO) {
-                val found = detector.discovery((servers.state.value.connections[serverId] as? ConnectionState.Connected)?.url ?: record.host)
-                _state.update { it.copy(version = found?.version?.takeIf(String::isNotBlank)) }
+            val address = (servers.state.value.connections[serverId] as? ConnectionState.Connected)?.url ?: record.host
+            val version = when (record.kind) {
+                ServerKinds.OWN_AUDIO -> detector.discovery(address)?.version?.takeIf(String::isNotBlank)
+                ServerKinds.AUDIOBOOKSHELF -> detector.audiobookshelfVersion(address)
+                else -> null
             }
+            _state.update { it.copy(version = version) }
         }
         // As iOS: the page says at once whether the server answers and accepts the sign-in.
         if (servers.state.value.checks[serverId] == null && !isOffline()) checkNow()
     }
 
     fun checkNow() = viewModelScope.launch { servers.checkNow(serverId) }
+
+    fun syncNow() {
+        if (_state.value.syncing) return
+        _state.update { it.copy(syncing = true, error = null) }
+        viewModelScope.launch {
+            try {
+                sync(serverId)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                log.error("gpodder", "Sync Now failed: ${e.javaClass.simpleName}")
+                _state.update { it.copy(error = e.userMessage()) }
+            } finally {
+                _state.update { it.copy(syncing = false) }
+            }
+        }
+    }
+
+    fun setLibraryShown(libraryId: String, shown: Boolean) = viewModelScope.launch {
+        servers.setLibraryHidden(serverId, libraryId, hidden = !shown)
+        librariesChanged()
+    }
 
     fun rename(name: String) = viewModelScope.launch { servers.rename(serverId, name) }
 

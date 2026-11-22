@@ -221,4 +221,11 @@ class ChaptersTest {
     fun `an unreadable chapters document is malformed`() {
         assertThrows(FeedException.Malformed::class.java) { Chapters.parse("{\"nope\":1}".encodeToByteArray()) }
     }
+
+    @Test
+    fun doublyEscapedNumericEntitiesAreDecoded() {
+        assertEquals("\uD83D\uDE80 Launch", HtmlText.decodeEntities("&amp;#128640; Launch"))
+        assertEquals("Tom &amp; Jerry", HtmlText.decodeEntities("Tom &amp;amp; Jerry"))
+        assertEquals("Tom & Jerry", HtmlText.decodeEntities("Tom &amp; Jerry"))
+    }
 }

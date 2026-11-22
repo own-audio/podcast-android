@@ -387,6 +387,7 @@ class OwnAudioPodcastSourceTest {
         assertEquals("https://pub.example/e1.mp3", publisher.url)
         val stored = oa.playback(EpisodeKey("p1", "e2"))
         assertTrue(stored.isServerFile && !stored.isTranscode)
+        assertEquals("the signed link's expiry goes with it", java.time.Instant.parse("2026-10-27T00:00:00Z"), stored.expiresAt)
     }
 
     @Test
@@ -401,6 +402,8 @@ class OwnAudioPodcastSourceTest {
         }
         val oa = source(server)
         oa.shows()
+        assertEquals("u1", oa.owner("p1"))
+        assertEquals(null, oa.owner("nope"))
         assertFalse(oa.isSharedWithFamily("p1"))
         oa.setSharedWithFamily("p1", true)
         assertTrue(oa.isSharedWithFamily("p1"))

@@ -89,7 +89,7 @@ data class OwnAudioCatalogue(
  * @param sleep waits between bulk follows; replaced in tests.
  */
 class OwnAudioPodcastSource(
-    val client: OwnAudioClient,
+    client: OwnAudioClient,
     private val store: ListeningStore,
     private val catalogueStore: ValueStore<OwnAudioCatalogue>,
     modules: Set<String> = emptySet(),
@@ -97,20 +97,34 @@ class OwnAudioPodcastSource(
     private val newKey: () -> String = { UUID.randomUUID().toString() },
     private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) : PodcastSource {
-    private val canBrowse = MODULE_DISCOVERY in modules
-    private val canSearch = MODULE_SEARCH in modules
+    /**
+     * The client at the address in use. The app swaps it when the address or the sign-in changes,
+     * so one source (and one sync of its catalogue) serves the server for the life of the process.
+     */
+    @Volatile
+    var client: OwnAudioClient = client
 
-    override val capabilities: Set<Capability> = setOf(
-        Capability.ADD_BY_URL,
-        Capability.UNFOLLOW,
-        Capability.REFRESH_ON_SERVER,
-        Capability.SYNCS_PROGRESS,
-        Capability.SERVER_DOWNLOADS,
-        Capability.FAMILY_SHARING,
-    ) + if (canSearch) setOf(Capability.SEARCH) else emptySet()
+    /** The server's modules that are on; learned with the address, after the source is made. */
+    @Volatile
+    var modules: Set<String> = modules
+
+    private val canBrowse get() = MODULE_DISCOVERY in modules
+    private val canSearch get() = MODULE_SEARCH in modules
+
+    override val capabilities: Set<Capability>
+        get() = setOf(
+            Capability.ADD_BY_URL,
+            Capability.UNFOLLOW,
+            Capability.REFRESH_ON_SERVER,
+            Capability.SYNCS_PROGRESS,
+            Capability.SERVER_DOWNLOADS,
+            Capability.FAMILY_SHARING,
+        ) + if (canSearch) setOf(Capability.SEARCH) else emptySet()
+
+    private val directoryInstance by lazy { Directory() }
 
     /** The server's directory for Discover, or null when it has neither module. */
-    val directory: Directory? = if (canBrowse || canSearch) Directory() else null
+    val directory: Directory? get() = if (canBrowse || canSearch) directoryInstance else null
 
     // MARK: the catalogue on the device
 
@@ -382,6 +396,9 @@ class OwnAudioPodcastSource(
     /** Whether the show is shared with the household: unfollowing it takes it away from them too. */
     suspend fun isSharedWithFamily(showId: String): Boolean = catalogue().podcasts[showId]?.visibility == "family"
 
+    /** The account that follows the show for the household: only it may share it or keep it private. */
+    suspend fun owner(showId: String): String? = catalogue().podcasts[showId]?.ownerId?.ifEmpty { null }
+
     /** How many episodes of each show the listener hasn't finished, for the Shows grid. */
     suspend fun unplayedCounts(): Map<String, Long> =
         translating { pageAll { cursor -> client.unplayed(cursor) } }.associate { it.podcastId to it.unplayed }
@@ -568,6 +585,7 @@ class OwnAudioPodcastSource(
             url = info.url,
             isServerFile = PUBLISHER_FILE !in info.reasons,
             isTranscode = info.decision == "transcode",
+            expiresAt = info.expiresAt,
         )
     }
 

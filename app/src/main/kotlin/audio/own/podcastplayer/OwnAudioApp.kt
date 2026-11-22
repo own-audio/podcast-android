@@ -14,7 +14,9 @@ class OwnAudioApp : Application() {
         container = AppContainer(this)
         container.log.info("app", "started ${container.versionName} (${container.versionCode})")
         container.scope.launch { container.servers.load() }
-        // The mobile-data choice comes with the settings (P9); for now Offline Mode and the network decide.
+        container.loadServerIcons()
+        // Downloaded Only on mobile data stops streams, not the lists (as on iOS): the model
+        // checks it at Play, so only Offline Mode and the network make the app offline.
         container.mainScope.launch {
             var before: Boolean? = null
             combine(container.preferences.offlineMode, container.network.state) { mode, network -> mode to network }

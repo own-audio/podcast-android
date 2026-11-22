@@ -9,7 +9,10 @@ import audio.own.core.servers.AddressOrigin
 import audio.own.core.servers.AddressScope
 import audio.own.core.servers.ServerAddress
 import audio.own.core.servers.ServerAuth
+import audio.own.core.servers.ServerLibraryRef
 import audio.own.core.servers.ServerRecord
+import audio.own.podcastplayer.app.PlaybackSettings
+import audio.own.podcastplayer.app.ServerExtras
 import audio.own.core.servers.StoredTokens
 import audio.own.podcastplayer.onboarding.AccountMode
 import audio.own.podcastplayer.onboarding.AccountState
@@ -73,6 +76,14 @@ class ScreenshotTest {
         displayName = "Shelf",
         host = "https://shelf.example.com",
         auth = ServerAuth.Audiobookshelf("alex", StoredTokens("a", "r", 0)),
+        libraries = listOf(ServerLibraryRef("lib1", "Podcasts"), ServerLibraryRef("lib2", "YouTube")),
+    )
+    private val sync = ServerRecord(
+        id = "s4",
+        kind = ServerKinds.GPODDER,
+        displayName = "podfetch",
+        host = "https://sync.example.com",
+        auth = ServerAuth.GPodder("alex", "secret", "own-audio-podcasts-0123abcd"),
     )
     private val demo = home.copy(id = "s2", displayName = "own.audio demo", host = "https://demo.example.com", auth = ServerAuth.OwnAudio("demo@example.com", StoredTokens("a", "r", 0)), addresses = emptyList())
 
@@ -100,10 +111,44 @@ class ScreenshotTest {
     @Composable
     private fun Settings() = SettingsContent(
         ui = SettingsUi(
-            listOf(home, demo, shelf),
+            listOf(home, demo, shelf, sync),
             connections = mapOf("s1" to ConnectionState.Connected("http://192.168.1.10:8080"), "s3" to ConnectionState.Unreachable),
+            playback = PlaybackSettings(skipBackSecs = 15, skipForwardSecs = 30, defaultRate = 1.25f),
             accent = AccentChoice.APP, language = AppLanguage.SYSTEM, version = "1.0.0 (123)"),
-        onBack = {}, onOpenServer = {}, onRemoveServer = {}, onAddServer = {}, onAccent = {}, onLanguage = {}, onLicences = {}, onLogs = {},
+        onBack = {}, onOpenServer = {}, onRemoveServer = {}, onAddServer = {}, onOfflineMode = {}, onPlayback = {}, onAccent = {}, onLanguage = {}, onLicences = {}, onLogs = {},
+    )
+
+    private val shotAt = Instant.parse("2026-11-21T14:05:00Z")
+
+    @Composable
+    private fun ShelfServer() = ServerDetailContent(
+        ui = ServerPageUi(
+            server = shelf,
+            connection = ConnectionState.Connected("https://shelf.example.com"),
+            check = null,
+            checking = false,
+            refused = false,
+            detail = ServerDetailState(version = "2.37.1"),
+            extras = ServerExtras(canAddShows = true, hiddenLibraries = setOf("lib2")),
+        ),
+        onBack = {}, onCheckNow = {}, onSignInAgain = {}, onDeleteAccount = {}, onFamily = {}, onDevices = {}, onListening = {},
+        onRename = {}, onConnection = {}, onAddAddress = {}, onRemoveAddress = {}, onRemove = {}, onDismissError = {},
+    )
+
+    @Composable
+    private fun SyncServer() = ServerDetailContent(
+        ui = ServerPageUi(
+            server = sync,
+            connection = ConnectionState.Connected("https://sync.example.com"),
+            check = ConnectionCheck(ConnectionCheck.Status.OK, shotAt),
+            checking = false,
+            refused = false,
+            detail = ServerDetailState(),
+            extras = ServerExtras(software = "podfetch", lastSyncedAtMs = shotAt.minusSeconds(300).toEpochMilli()),
+            now = shotAt.toEpochMilli(),
+        ),
+        onBack = {}, onCheckNow = {}, onSignInAgain = {}, onDeleteAccount = {}, onFamily = {}, onDevices = {}, onListening = {},
+        onRename = {}, onConnection = {}, onAddAddress = {}, onRemoveAddress = {}, onRemove = {}, onDismissError = {},
     )
 
     @Composable
@@ -139,6 +184,14 @@ class ScreenshotTest {
     @Test fun settingsDark() = shoot("settings_dark", true) { Settings() }
     @Test @Config(qualifiers = "+cs") fun settingsCzech() = shoot("settings_cs", false) { Settings() }
     @Test @Config(fontScale = 2f) fun settingsLargestText() = shoot("settings_font200", false) { Settings() }
+
+    @Test fun shelfServerLight() = shoot("server_audiobookshelf_light", false) { ShelfServer() }
+    @Test fun shelfServerDark() = shoot("server_audiobookshelf_dark", true) { ShelfServer() }
+    @Test @Config(qualifiers = "+cs") fun shelfServerCzech() = shoot("server_audiobookshelf_cs", false) { ShelfServer() }
+
+    @Test fun syncServerLight() = shoot("server_gpodder_light", false) { SyncServer() }
+    @Test fun syncServerDark() = shoot("server_gpodder_dark", true) { SyncServer() }
+    @Test @Config(qualifiers = "+cs") fun syncServerCzech() = shoot("server_gpodder_cs", false) { SyncServer() }
 
     @Test fun serverLight() = shoot("server_light", false) { Server() }
     @Test fun serverDark() = shoot("server_dark", true) { Server() }

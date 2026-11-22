@@ -101,4 +101,6 @@ data class Playback(
      * pieces of by Range, so it is never kept ahead on the device.
      */
     val isTranscode: Boolean = false,
+    /** When the source stops honouring [url] (a signed link, a token in the query); null: never. */
+    val expiresAt: java.time.Instant? = null,
 )

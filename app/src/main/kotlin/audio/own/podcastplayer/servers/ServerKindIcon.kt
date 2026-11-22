@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import audio.own.core.designsystem.theme.LocalPalette
 import audio.own.podcastplayer.R
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import java.io.File
 
 /** The kind's name: product names stay as they are, "gPodder sync" is translated. */
 @Composable
@@ -44,12 +47,16 @@ fun kindTitle(kind: String): String = when (kind) {
 
 /**
  * The server's kind at a glance. own.audio's mark ships with the app; Audiobookshelf's and
- * gPodder's artwork is GPL-licensed and the app carries none of it, so a symbol stands in on a
- * rounded tile, as on iOS before the server's own icon has loaded.
+ * gPodder's artwork is GPL-licensed and the app carries none of it: [icon] is the one the server
+ * itself serves ([ServerIcons]), and a symbol on a rounded tile stands in until it has loaded.
  */
 @Composable
-fun ServerKindIcon(kind: String, modifier: Modifier = Modifier, size: Dp = 28.dp) {
+fun ServerKindIcon(kind: String, modifier: Modifier = Modifier, size: Dp = 28.dp, icon: File? = null) {
     val shape = RoundedCornerShape(size * 0.22f)
+    if (icon != null && kind != ServerKinds.OWN_AUDIO) {
+        AsyncImage(model = icon, contentDescription = kindTitle(kind), contentScale = ContentScale.Fit, modifier = modifier.size(size).clip(shape))
+        return
+    }
     if (kind == ServerKinds.OWN_AUDIO) {
         val description = kindTitle(kind)
         OwnAudioServerLogo(modifier.size(size).clip(shape).semantics { contentDescription = description })

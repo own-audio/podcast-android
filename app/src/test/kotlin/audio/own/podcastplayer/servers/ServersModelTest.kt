@@ -82,17 +82,19 @@ class ServersModelTest {
     }
 
     @Test
-    fun audiobookshelfIsLeftForALaterVersion() {
+    fun anAudiobookshelfAddressIsSignedInThere() {
         notOwnAudio(mapOf("/status" to FakeOwnAudio.json("""{"app":"audiobookshelf","serverVersion":"2.37.1","isInit":true}""")))
-        expectMessage(R.string.error_later_version) { model.signIn(fake.url, "a", "b", "") }
+        expectMessage(R.string.error_generic) { model.signIn(fake.url, "a", "b", "") }
+        assertTrue(fake.paths().contains("POST /login"))
         runBlocking { assertTrue(harness.store.loadAll().isEmpty()) }
     }
 
     @Test
-    fun podfetchIsDetectedBeforeAudiobookshelfAndLeftForLater() = runBlocking {
+    fun podfetchIsDetectedBeforeAudiobookshelfAndSignedInAsGPodder() = runBlocking {
         notOwnAudio(mapOf("/api/v1/sys/config" to FakeOwnAudio.json("""{"podindexConfigured":false,"rssFeed":"x","basicAuth":true}""")))
         assertEquals(Detected.GPodder(fake.url, "podfetch"), ServerDetector(harness.http, "test", harness.log).detect(fake.url))
-        expectMessage(R.string.error_later_version) { model.signIn(fake.url, "a", "b", "") }
+        expectMessage(R.string.error_generic) { model.signIn(fake.url, "a", "b", "") }
+        assertTrue(fake.paths().contains("POST /api/2/auth/a/login.json"))
     }
 
     @Test

@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +46,7 @@ import audio.own.podcastplayer.podcasts.DiscoverViewModel
 import audio.own.podcastplayer.podcasts.DownloadsPlaceholder
 import audio.own.podcastplayer.podcasts.EpisodeActions
 import audio.own.podcastplayer.podcasts.EpisodeContent
+import audio.own.podcastplayer.podcasts.FamilySharing
 import audio.own.podcastplayer.podcasts.MiniPlayer
 import audio.own.podcastplayer.podcasts.NewEpisodesContent
 import audio.own.podcastplayer.podcasts.PlayerActions
@@ -288,7 +291,8 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         val similar by produceState<List<ShowSearchResult>?>(null, show.show.feedUrl, state.catalogueServer) {
             value = show.show.feedUrl?.let { model.similarShows(it) }
         }
-        val shared by produceState(false, show.id) { value = model.isSharedWithFamily(show) }
+        var sharing by remember(show.id) { mutableStateOf<FamilySharing?>(null) }
+        LaunchedEffect(show.id) { sharing = model.familySharing(show) }
         ShowContent(
             show = show,
             sourceName = state.sourceName(show.source),
@@ -297,7 +301,9 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
             actions = actions,
             menu = ShowMenu(show.show.link, show.show.feedUrl, Capability.UNFOLLOW in model.capabilities(show.source)),
             similar = similar,
-            sharedWithFamily = shared,
+            sharedWithFamily = sharing?.shared == true,
+            canShareWithFamily = sharing?.canChange == true,
+            onShareWithFamily = { on -> model.setSharedWithFamily(show, on) { held -> sharing = sharing?.copy(shared = held) } },
             onSettings = { nav.navigate(PodcastRoutes.showSettings(show)) },
             onShareFeed = { shareFeed(context, it) },
             onUnfollow = { model.unfollow(show) { nav.popBackStack() } },
@@ -408,7 +414,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         val state by model.state.collectAsStateWithLifecycle()
         val player by container.player.state.collectAsStateWithLifecycle()
         val actions = rememberModelActions(container, nav)
-        PlayerContent(player, state.upNext, actions, onClose = back, showOutput = OutputSwitcher.isAvailable)
+        PlayerContent(player, state.upNext, actions, onClose = back, showOutput = OutputSwitcher.isAvailable, playsOn = state.settings.continueWithNewEpisodes)
     }
 }
 

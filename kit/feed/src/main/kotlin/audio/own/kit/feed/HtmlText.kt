@@ -22,6 +22,15 @@ object HtmlText {
 
     /** The named entities feeds use, and every numeric one. */
     fun decodeEntities(text: String): String {
+        val once = decodeOnce(text)
+        // Some servers escape a feed's entities a second time ("&amp;#128640;"); one more pass
+        // when a numeric entity is left, never more, so a literal "&amp;" stays an ampersand.
+        return if (once != text && numericEntity.containsMatchIn(once)) decodeOnce(once) else once
+    }
+
+    private val numericEntity = Regex("&#(x[0-9A-Fa-f]{1,6}|[0-9]{1,7});")
+
+    private fun decodeOnce(text: String): String {
         if (!text.contains('&')) return text
         val out = StringBuilder(text.length)
         var index = 0
