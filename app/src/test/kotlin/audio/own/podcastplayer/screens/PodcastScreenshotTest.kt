@@ -27,6 +27,13 @@ import audio.own.podcastplayer.podcasts.DiscoverContent
 import audio.own.podcastplayer.podcasts.DiscoverViewModel
 import audio.own.podcastplayer.podcasts.EpisodeActions
 import audio.own.podcastplayer.podcasts.EpisodeContent
+import audio.own.podcastplayer.podcasts.EpisodeSummarySection
+import audio.own.podcastplayer.podcasts.SummaryUi
+import audio.own.kit.ownaudio.EpisodeAnswer
+import audio.own.kit.ownaudio.EpisodeSummary
+import audio.own.kit.ownaudio.SummaryLength
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import audio.own.podcastplayer.podcasts.MiniPlayer
 import audio.own.podcastplayer.podcasts.NewEpisodesContent
 import audio.own.podcastplayer.podcasts.PlayerActions
@@ -251,6 +258,33 @@ class PodcastScreenshotTest {
     @Test fun showDark() = shoot("show_dark", true) { ShowPage() }
     @Test @Config(qualifiers = "+cs") fun showCzech() = shoot("show_cs", false) { ShowPage() }
     @Test @Config(fontScale = 2f) fun showLargestText() = shoot("show_font200", false) { ShowPage() }
+
+    /** P10: a summary with its cost, a question answered, and the field for the next. */
+    @Composable
+    private fun Summary() = androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
+        EpisodeSummarySection(
+            state = SummaryUi(
+                summary = EpisodeSummary("en", SummaryLength.MEDIUM, "The hosts walk through the week's news: a new tram line, the river clean-up and the library's late opening on Thursdays.", 12_000),
+                checked = true,
+                turns = listOf(EpisodeAnswer("a1", "When does the library stay open late?", "On Thursdays, until nine in the evening.", 2_500)),
+            ),
+            onLength = {}, onSummarize = {}, onQuestion = {}, onAsk = {}, onClearQuestions = {},
+        )
+    }
+
+    /** No summary in this length yet: what it costs, and the button. */
+    @Composable
+    private fun NoSummary() = androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) {
+        EpisodeSummarySection(
+            state = SummaryUi(length = SummaryLength.SHORT, checked = true, error = audio.own.podcastplayer.app.UiText(audio.own.podcastplayer.R.string.summary_no_credit)),
+            onLength = {}, onSummarize = {}, onQuestion = {}, onAsk = {}, onClearQuestions = {},
+        )
+    }
+
+    @Test fun summaryLight() = shoot("episode_summary_light", false) { Summary() }
+    @Test fun summaryDark() = shoot("episode_summary_dark", true) { Summary() }
+    @Test @Config(qualifiers = "+cs") fun summaryCzech() = shoot("episode_summary_cs", false) { Summary() }
+    @Test fun summaryMissingLight() = shoot("episode_summary_none_light", false) { NoSummary() }
 
     @Test fun episodeLight() = shoot("episode_light", false) { EpisodePage() }
     @Test fun episodeDark() = shoot("episode_dark", true) { EpisodePage() }

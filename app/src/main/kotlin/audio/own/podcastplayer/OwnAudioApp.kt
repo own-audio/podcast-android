@@ -2,6 +2,8 @@ package audio.own.podcastplayer
 
 import android.app.Application
 import androidx.work.Configuration
+import androidx.work.WorkManager
+import audio.own.core.sync.PeriodicRefresh
 import audio.own.core.servers.MobileData
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -37,6 +39,10 @@ class OwnAudioApp : Application(), Configuration.Provider {
             container.podcasts.state.first { it.loaded }
             container.downloads.start()
         }
+        container.widget.start(container.scope)
+        // At most hourly, connected and not on a low battery; scheduling again keeps the plan.
+        runCatching { PeriodicRefresh.schedule(WorkManager.getInstance(this)) }
+            .onFailure { container.log.error("app", "the background refresh wasn't scheduled: ${it.javaClass.simpleName}") }
     }
 
     override val workManagerConfiguration: Configuration

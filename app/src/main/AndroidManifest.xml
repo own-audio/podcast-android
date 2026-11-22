@@ -41,6 +41,21 @@
                 <data android:scheme="podcast" />
                 <data android:scheme="pcast" />
             </intent-filter>
+            <!-- The widget's rows: ownpodcast://play/<episode id>. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ownpodcast" android:host="play" />
+            </intent-filter>
+            <!-- "Play ‹show› on own.podcast" from the assistant. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <service
             android:name=".playback.PodcastService"
@@ -51,6 +66,28 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+        <!-- The home-screen widget "Up Next". -->
+        <receiver
+            android:name=".widget.UpNextWidgetReceiver"
+            android:exported="true"
+            android:label="@string/up_next">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/up_next_widget" />
+        </receiver>
+        <!-- Android Auto's row pictures; it serves only pictures the browse tree named. -->
+        <provider
+            android:name=".playback.CarArtworkProvider"
+            android:authorities="${applicationId}.artwork"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+        <!-- Android Auto finds the media service through this. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
         <!-- Play on a headset's button after the app was ended resumes the last episode. -->
         <receiver
             android:name="androidx.media3.session.MediaButtonReceiver"

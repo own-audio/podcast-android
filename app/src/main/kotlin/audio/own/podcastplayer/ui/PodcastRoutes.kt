@@ -46,6 +46,8 @@ import audio.own.podcastplayer.podcasts.DiscoverViewModel
 import audio.own.podcastplayer.downloads.DownloadsContent
 import audio.own.podcastplayer.podcasts.EpisodeActions
 import audio.own.podcastplayer.podcasts.EpisodeContent
+import audio.own.podcastplayer.podcasts.EpisodeSummarySection
+import audio.own.podcastplayer.podcasts.EpisodeSummaryViewModel
 import audio.own.podcastplayer.podcasts.FamilySharing
 import audio.own.podcastplayer.podcasts.MiniPlayer
 import audio.own.podcastplayer.podcasts.NewEpisodesContent
@@ -353,6 +355,14 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
         val actions = rememberModelActions(container, nav)
         val scope = rememberCoroutineScope()
         val ui = state.rowUi(item, player, model.canPlay(item))
+        val ai = remember(item.id, state.sources) { model.episodeAI(item) }
+        val summary: (@Composable () -> Unit)? = ai?.let {
+            {
+                val vm = viewModel(key = "summary-${item.id}") { EpisodeSummaryViewModel(it) }
+                val summaryState by vm.state.collectAsStateWithLifecycle()
+                EpisodeSummarySection(summaryState, vm::setLength, vm::summarize, vm::setQuestion, vm::ask, vm::clearQuestions)
+            }
+        }
         EpisodeContent(
             ui = ui,
             sourceName = state.sourceName(item.source),
@@ -368,6 +378,7 @@ fun NavGraphBuilder.podcastPages(container: AppContainer, nav: NavHostController
             },
             onBack = back,
             bottomBar = rememberMiniPlayer(container, nav),
+            summary = summary,
         )
     }
     composable(PodcastRoutes.DOWNLOADS) {

@@ -43,6 +43,7 @@ dependencies {
     implementation(project(":core:strings"))
     implementation(project(":core:servers"))
     implementation(project(":core:downloads"))
+    implementation(project(":core:sync"))
     implementation(project(":kit:ownaudio"))
     implementation(project(":kit:feed"))
     implementation(project(":library"))
@@ -65,6 +66,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.glance.appwidget)
 
     // Sign in with Google: only the play build has Google Play services.
     "playImplementation"(libs.androidx.credentials)

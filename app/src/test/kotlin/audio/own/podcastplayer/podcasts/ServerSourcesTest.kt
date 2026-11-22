@@ -499,6 +499,23 @@ class ServerSourcesTest {
         Thread.sleep(300)
         assertEquals(1, engine.loads.size)
     }
+
+    @Test
+    fun `Summary and Ask show for own_audio episodes with a transcript on a server with summaries, nowhere else`() {
+        val server = ownAudio().kept()
+        val state = MutableStateFlow(ServersState(loaded = true, servers = listOf(ownAudioRecord(server.url)), modules = mapOf(oaId to setOf("summaries"))))
+        val model = model(state)
+        onMain { model.load() }
+        val ref = SourceRef.Server(UUID.fromString(oaId))
+        val episode = audio.own.podcast.library.Episode(id = "e1", showId = "p1", title = "One")
+        val transcript = listOf(audio.own.podcast.library.Transcript("https://pub.example/e1.vtt", "text/vtt"))
+        assertNotNull(model.episodeAI(SourcedEpisode(ref, episode.copy(transcripts = transcript))))
+        assertEquals("no transcript, nothing to read", null, model.episodeAI(SourcedEpisode(ref, episode)))
+        assertEquals("the device's feeds have no summaries", null, model.episodeAI(SourcedEpisode(SourceRef.Phone, episode.copy(transcripts = transcript))))
+        state.update { it.copy(modules = mapOf(oaId to setOf("podcast_discovery"))) }
+        runBlocking { eventually { model.episodeAI(SourcedEpisode(ref, episode.copy(transcripts = transcript))) == null } }
+        assertTrue("reading whether it is offered asks the server nothing", server.requests.none { it.url.encodedPath.startsWith("/api/v2/summaries") })
+    }
 }
 
 private fun UiTextOf(id: Int) = audio.own.podcastplayer.app.UiText(id)

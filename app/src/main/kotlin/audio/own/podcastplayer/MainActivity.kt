@@ -1,6 +1,8 @@
 package audio.own.podcastplayer
 
 import android.Manifest
+import android.app.SearchManager
+import android.provider.MediaStore
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -13,6 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import audio.own.podcastplayer.ui.AppRoot
+import audio.own.podcastplayer.widget.WidgetSnapshot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -27,7 +30,8 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent { AppRoot(container) }
-        handle(intent)
+        // After a rotation the same intent comes back; it was handled the first time.
+        if (savedInstanceState == null) handle(intent)
         askForNotificationsOnFirstPlay()
     }
 
@@ -46,11 +50,29 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    /** `feed://`, `podcast://` and `pcast://` links: Add a Show with the address. */
+    /**
+     * `feed://`, `podcast://` and `pcast://` links: Add a Show with the address. The widget's
+     * `ownpodcast://play/<id>` plays that episode; the Continue Listening shortcut and the
+     * assistant's "play ‹show›" play what they name.
+     */
     private fun handle(intent: Intent?) {
-        val data = intent?.data ?: return
-        if (intent.action != Intent.ACTION_VIEW || data.scheme !in FEED_SCHEMES) return
-        container.podcasts.openFeedLink(data.toString())
+        intent ?: return
+        val podcasts = container.podcasts
+        when (intent.action) {
+            ACTION_CONTINUE -> container.mainScope.launch { podcasts.continueListening() }
+            MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> {
+                val query = intent.getStringExtra(SearchManager.QUERY)
+                container.mainScope.launch { podcasts.playFromSearch(query) }
+            }
+            Intent.ACTION_VIEW -> {
+                val data = intent.data ?: return
+                val episode = WidgetSnapshot.episodeId(data)
+                when {
+                    episode != null -> container.mainScope.launch { podcasts.playLink(episode) }
+                    data.scheme in FEED_SCHEMES -> podcasts.openFeedLink(data.toString())
+                }
+            }
+        }
     }
 
     /**
@@ -71,5 +93,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         val FEED_SCHEMES = setOf("feed", "podcast", "pcast")
+        const val ACTION_CONTINUE = "audio.own.podcastplayer.CONTINUE_LISTENING"
     }
 }

@@ -28,13 +28,13 @@ both (P0).
 | P7 | Welcome, add a source with detection, server page (Podcasts specifics) | ☐ |
 | P8 | Downloads, per-show rules, offline, refresh | ☑ 2026-11-22: a 144 MB episode resumed after a kill and played offline; "Newest 1" fetched by itself after a refresh |
 | P9 | Settings | ☑ 2026-11-22 (Playback, Streaming, Offline Mode; the Downloads rows come with P8) |
-| P10 | Summaries and Ask (hosted own.audio) | ☐ |
-| P11 | Android Auto, widget, deep links, voice, background refresh | ☐ |
+| P10 | Summaries and Ask (hosted own.audio) | ◐ built 2026-11-22, tested against fakes only (no paid work on real servers) |
+| P11 | Android Auto, widget, deep links, voice, background refresh | ◐ built 2026-11-22; browse tree, search and voice checked through the real media service; still to see: the widget on a home screen, Auto on a head unit |
 | P12 | Localization, accessibility, tablets, misuse tests | ☐ |
 | P13 | Release | ☐ |
 | P14 | After 1.0: OPML, transcripts, translation | ☐ |
 
-**Where we stopped:** P8 done 2026-11-22 and the player moved to `:player:spoken`. Next: P10 summaries and Ask, P11 Android Auto/widget/links/voice, P12 polish, the guide. Wanted in `:player:spoken` (book-android): a part's length taken from ExoPlayer, `setChapters` after loading, swapping a part's file without reloading.
+**Where we stopped:** P10 and P11 built 2026-11-22. Next: P12 polish (accessibility, tablets, misuse tests, end-to-end with the fixture feed server), the guide, P13 release. Wanted in `:player:spoken` (book-android): a part's length from ExoPlayer, `setChapters` after loading, swapping a part's file in place.
 
 ## Rules for whoever executes this plan
 

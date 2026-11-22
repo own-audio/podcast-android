@@ -197,4 +197,35 @@
         <item quantity="other">%d Episodes</item>
     </plurals>
     <string name="show_downloads_footer">New episodes download on their own, the newest first; unplayed ones only. Settings decides whether this waits for Wi-Fi.</string>
+    <!-- P10: summaries and questions (hosted own.audio). -->
+    <string name="summary">Summary</string>
+    <string name="summary_length">Summary Length</string>
+    <string name="summary_short">Short</string>
+    <string name="summary_medium">Medium</string>
+    <string name="summary_long">Long</string>
+    <string name="summary_explanation">A summary is made from the transcript with AI and paid from your family\'s credit, usually a cent or two. Everyone in the family can then read it.</string>
+    <string name="summarize_episode">Summarize Episode</string>
+    <string name="summarizing">Summarizing…</string>
+    <string name="summary_cost">Cost %s</string>
+    <string name="ask_about_episode">Ask about this episode</string>
+    <string name="ask">Ask</string>
+    <string name="ask_footnote">Answers come from the episode\'s transcript only, and each one is paid from your family\'s credit. Your questions are kept for you alone.</string>
+    <string name="clear_questions">Clear Questions</string>
+    <string name="clear_questions_confirm">Delete your questions and answers for this episode?</string>
+    <string name="summary_no_credit">There isn\'t enough credit in the family for this.</string>
+    <string name="summary_daily_limit">Today\'s limit for paid work is reached. Try again tomorrow.</string>
+    <string name="summary_no_transcript">This episode has no transcript to read.</string>
+    <!-- P11: Android Auto, the widget, links and the assistant. -->
+    <string name="auto_follow_on_phone">Follow a show on your phone</string>
+    <string name="auto_no_new_episodes">No new episodes</string>
+    <string name="auto_nothing_downloaded">Nothing downloaded</string>
+    <string name="auto_nothing_here">Nothing here yet</string>
+    <string name="auto_no_shows">No shows yet</string>
+    <string name="no_chapters">No chapters</string>
+    <string name="auto_speed">Speed %s</string>
+    <string name="widget_description">The episode you are in and the newest ones, a tap away.</string>
+    <string name="widget_nothing_new">Nothing new yet</string>
+    <string name="continue_listening">Continue Listening</string>
+    <string name="voice_show_not_found">You don\'t follow that show any more.</string>
+    <string name="voice_nothing_to_play">There is nothing to play; follow a show in own.podcast first.</string>
 </resources>

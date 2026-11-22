@@ -65,6 +65,7 @@ import audio.own.podcastplayer.servers.gpodderProblem
 import audio.own.podcastplayer.app.UiText
 import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.podcastplayer.playback.PlaybackEngine
+import audio.own.podcastplayer.playback.VoiceSearch
 import audio.own.podcastplayer.downloads.EpisodeDownloader
 import audio.own.podcastplayer.downloads.DownloadsState
 import audio.own.podcast.library.DownloadRules
@@ -234,6 +235,8 @@ class PodcastModel(
     /** What Audiobookshelf's sessions show for this device. */
     private val absDevice: DeviceInfo = DeviceInfo("own-audio-podcasts", "own.audio Podcasts", "1", "", ""),
     private val syncDelayMs: Long = SYNC_DELAY_MS,
+    /** The app's language, two letters: what summaries are written in. */
+    private val language: () -> String = { Locale.getDefault().language },
 ) {
     /** The few words the model itself names (the device as a source, a removed server). */
     interface Strings {
@@ -1311,6 +1314,21 @@ class PodcastModel(
 
     // endregion
 
+    // region Summaries and questions (own.audio's hosted service)
+
+    /**
+     * Summaries and questions for [item]: an episode with a transcript on an own.audio server
+     * that has `modules.summaries`. Null everywhere else, and the section stays hidden.
+     */
+    fun episodeAI(item: SourcedEpisode): EpisodeAI? {
+        if (item.episode.transcripts.isEmpty()) return null
+        val source = ownAudioSource(item.source) ?: return null
+        if (MODULE_SUMMARIES !in source.modules) return null
+        return OwnAudioEpisodeAI(source.client, item.episode.id, language().take(2).ifEmpty { "en" })
+    }
+
+    // endregion
+
     // region Foreground, links, errors
 
     /**
@@ -1335,6 +1353,102 @@ class PodcastModel(
         liveUpdates = ownAudio.value.mapValues { (_, source) ->
             scope.launch { source.followLiveUpdates(onChange = { reloadLists() }) }
         }
+    }
+
+    /**
+     * Plays an episode known only by its id (the widget's `ownpodcast://play/<id>`, a row in the
+     * car): from the lists, the downloads, or its source. [known] is the episode when the caller
+     * already holds it. Returns whether it plays.
+     */
+    suspend fun playLink(id: String, known: SourcedEpisode? = null): Boolean {
+        _state.first { it.loaded }
+        val current = player.state.value
+        if (current.item?.id == id) {
+            if (!current.isPlaying) player.play()
+            return true
+        }
+        val state = _state.value
+        val item = known ?: state.inbox.firstOrNull { it.id == id } ?: state.downloads.entries[id]?.record?.item ?: run {
+            val (ref, key) = SourcedEpisode.parse(id) ?: return failed(R.string.error_episode_gone)
+            val source = source(ref) ?: return failed(R.string.error_episode_gone)
+            val episode = try {
+                source.episode(key)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return failed(R.string.error_episode_gone)
+            }
+            SourcedEpisode(ref, episode)
+        }
+        // From a widget or a car nobody is asked where to continue: the newer position wins.
+        play(item, automatic = true)
+        return player.state.value.item?.id == item.id
+    }
+
+    /**
+     * "Continue listening": the episode in the player, else the last one played, else one under
+     * way in New Episodes, else the newest that can play.
+     */
+    suspend fun continueListening(): Boolean {
+        _state.first { it.loaded }
+        if (player.state.value.item == null) restoreLastPlayed()
+        if (player.state.value.item != null) {
+            if (!player.state.value.isPlaying) player.play()
+            return true
+        }
+        val state = _state.value
+        val next = VoiceSearch.continueCandidate(state.inbox, state.progress, ::canPlay)
+            ?: return failed(R.string.voice_nothing_to_play)
+        play(next, automatic = true)
+        return player.state.value.item?.id == next.id
+    }
+
+    /**
+     * What the assistant or the car's search asked for: nothing or "continue" goes on listening;
+     * a show's name plays its episode under way, else its newest; an episode's title plays it.
+     */
+    suspend fun playFromSearch(query: String?): Boolean {
+        _state.first { it.loaded }
+        if (VoiceSearch.isContinue(query)) return continueListening()
+        val state = _state.value
+        VoiceSearch.bestShow(query.orEmpty(), state.shows)?.let { show ->
+            val episodes = try {
+                episodes(show)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                state.inbox.filter { it.source == show.source && it.episode.showId == show.show.id }
+            }
+            val next = VoiceSearch.showEpisode(episodes, state.progress, ::canPlay) ?: return failed(R.string.voice_nothing_to_play)
+            play(next, automatic = true)
+            return player.state.value.item?.id == next.id
+        }
+        val pool = (state.inbox + state.downloads.entries.values.filter { it.isDone }.mapNotNull { it.record.item }).distinctBy { it.id }.filter(::canPlay)
+        val episode = VoiceSearch.rankedEpisodes(query.orEmpty(), pool, state).firstOrNull() ?: return failed(R.string.voice_show_not_found)
+        play(episode, automatic = true)
+        return player.state.value.item?.id == episode.id
+    }
+
+    /**
+     * The periodic job: the lists, feeds and servers refreshed with the download rules after
+     * them, positions sent; while an episode plays only the positions, so nothing competes with it.
+     */
+    suspend fun backgroundRefresh(): Boolean {
+        if (!_state.value.loaded) {
+            load()
+            return true
+        }
+        if (player.state.value.isPlaying) {
+            sendPendingProgress()
+            return true
+        }
+        refresh(asked = false)
+        return true
+    }
+
+    private fun failed(id: Int): Boolean {
+        fail(UiText(id))
+        return false
     }
 
     /** A `feed://`, `podcast://` or `pcast://` link: Add a Show opens with it filled in. */
@@ -1362,6 +1476,7 @@ class PodcastModel(
 
     companion object {
         const val DEFAULT_RATE = 1.0f
+        const val MODULE_SUMMARIES = "summaries"
         const val RESUME_QUESTION_MS = 30_000L
         const val REMOTE_POSITION_TIMEOUT_MS = 4_000L
         const val MAX_SUGGESTIONS = 20

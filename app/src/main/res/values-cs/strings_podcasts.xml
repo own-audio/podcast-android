@@ -200,4 +200,35 @@
         <item quantity="other">%d epizod</item>
     </plurals>
     <string name="show_downloads_footer">Nové epizody se stahují samy, nejnovější první, a jen nepřehrané. Zda se čeká na Wi-Fi, určuje Nastavení.</string>
+    <!-- P10: shrnutí a otázky (hostované own.audio). -->
+    <string name="summary">Shrnutí</string>
+    <string name="summary_length">Délka shrnutí</string>
+    <string name="summary_short">Krátké</string>
+    <string name="summary_medium">Střední</string>
+    <string name="summary_long">Delší</string>
+    <string name="summary_explanation">Shrnutí se vytvoří z přepisu pomocí AI a zaplatí z kreditu vaší rodiny, obvykle méně než korunu. Pak si ho může přečíst celá rodina.</string>
+    <string name="summarize_episode">Shrnout epizodu</string>
+    <string name="summarizing">Shrnuji…</string>
+    <string name="summary_cost">Cena %s</string>
+    <string name="ask_about_episode">Zeptejte se na tuto epizodu</string>
+    <string name="ask">Zeptat se</string>
+    <string name="ask_footnote">Odpovědi vycházejí jen z přepisu epizody a každá se platí z kreditu vaší rodiny. Vaše otázky vidíte jen vy.</string>
+    <string name="clear_questions">Smazat otázky</string>
+    <string name="clear_questions_confirm">Smazat vaše otázky a odpovědi k této epizodě?</string>
+    <string name="summary_no_credit">Na tohle rodina nemá dost kreditu.</string>
+    <string name="summary_daily_limit">Dnešní limit placené práce je vyčerpaný. Zkuste to zítra.</string>
+    <string name="summary_no_transcript">Tato epizoda nemá přepis, ze kterého by šlo vycházet.</string>
+    <!-- P11: Android Auto, widget, odkazy a asistent. -->
+    <string name="auto_follow_on_phone">Odebírejte pořad v telefonu</string>
+    <string name="auto_no_new_episodes">Žádné nové epizody</string>
+    <string name="auto_nothing_downloaded">Nic není staženo</string>
+    <string name="auto_nothing_here">Zatím tu nic není</string>
+    <string name="auto_no_shows">Zatím žádné pořady</string>
+    <string name="no_chapters">Žádné kapitoly</string>
+    <string name="auto_speed">Rychlost %s</string>
+    <string name="widget_description">Rozposlouchaná epizoda a ty nejnovější na jedno klepnutí.</string>
+    <string name="widget_nothing_new">Zatím nic nového</string>
+    <string name="continue_listening">Pokračovat v poslechu</string>
+    <string name="voice_show_not_found">Tento pořad už neodebíráte.</string>
+    <string name="voice_nothing_to_play">Není co přehrát; nejdřív v own.podcast začněte odebírat pořad.</string>
 </resources>

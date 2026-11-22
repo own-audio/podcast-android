@@ -49,6 +49,11 @@ import audio.own.podcast.library.room.PodcastDatabase
 import audio.own.podcast.library.room.RoomFeedLibraryStore
 import audio.own.podcast.library.room.RoomValueStore
 import audio.own.podcastplayer.playback.Artwork
+import audio.own.podcastplayer.playback.CarArtwork
+import audio.own.podcastplayer.widget.UpNextWidget
+import audio.own.podcastplayer.widget.WidgetStore
+import audio.own.podcastplayer.widget.WidgetUpdater
+import audio.own.core.sync.RefreshWorkerFactory
 import audio.own.podcastplayer.playback.PodcastPlayer
 import audio.own.player.spoken.SpokenPlayer
 import audio.own.player.spoken.chapters.PartReaders
@@ -204,10 +209,31 @@ class AppContainer(context: Context) {
         )
     }
 
-    /** WorkManager's workers, with their dependencies. */
-    val workerFactory = DelegatingWorkerFactory().apply { addFactory(downloads.workerFactory) }
+    /**
+     * WorkManager's workers, with their dependencies: the downloads, and the periodic refresh
+     * (feeds, servers, download rules, waiting positions; the widget follows the lists).
+     */
+    val workerFactory = DelegatingWorkerFactory().apply {
+        addFactory(downloads.workerFactory)
+        addFactory(RefreshWorkerFactory { withContext(Dispatchers.Main) { podcasts.backgroundRefresh() } })
+    }
 
     val artwork = Artwork(app)
+
+    /** Android Auto's row pictures, served small through the app's content provider. */
+    val carArtwork = CarArtwork("${app.packageName}.artwork", File(app.cacheDir, "car-artwork"))
+
+    /** The Up Next widget's snapshot, written by the app only. */
+    val widget by lazy {
+        WidgetUpdater(
+            context = app,
+            store = WidgetStore(UpNextWidget.folder(app)),
+            library = podcasts.state,
+            player = player.state,
+            jpeg = { url -> artwork.smallJpeg(url, WIDGET_COVER_PX) },
+            log = log,
+        )
+    }
 
     val navStash = audio.own.podcastplayer.ui.NavStash()
 
@@ -259,6 +285,7 @@ class AppContainer(context: Context) {
                 model = Build.MODEL,
                 sdkVersion = Build.VERSION.SDK_INT.toString(),
             ),
+            language = { appLocale().language },
         )
     }
 
@@ -282,6 +309,11 @@ class AppContainer(context: Context) {
     val logHeader: String get() = "own.podcast $versionName ($versionCode), Android ${Build.VERSION.RELEASE}, ${Build.MANUFACTURER} ${Build.MODEL}"
 
     private fun appLocale(): Locale = AppCompatDelegate.getApplicationLocales()[0] ?: Locale.getDefault()
+
+    private companion object {
+        /** The small widget's 56 dp cover at about 2×. */
+        const val WIDGET_COVER_PX = 112
+    }
 }
 
 /** `last-played.json`, written whole and atomically: a kill mid-write leaves the previous one. */

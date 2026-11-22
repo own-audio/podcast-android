@@ -167,6 +167,8 @@ fun EpisodeContent(
     onPlayFrom: (Long) -> Unit,
     onBack: () -> Unit,
     bottomBar: @Composable () -> Unit = {},
+    /** Summaries and Ask, for an own.audio episode with a transcript on a server that has them. */
+    summary: (@Composable () -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     val res = LocalResources.current
@@ -214,6 +216,7 @@ fun EpisodeContent(
                     }
                 }
             }
+            summary?.invoke()
             val listed = chapters.filter { it.isInTableOfContents }
             if (listed.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
