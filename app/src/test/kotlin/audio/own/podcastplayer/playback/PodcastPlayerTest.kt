@@ -162,7 +162,8 @@ class PodcastPlayerTest {
         androidx.media3.test.utils.robolectric.RobolectricUtil.runMainLooperUntil(
             { exo.currentMediaItem?.localConfiguration?.uri == Uri.fromFile(download) && exo.playbackState == Player.STATE_READY },
             RUN_TIMEOUT_MS,
-            androidx.media3.common.util.Clock.DEFAULT,
+            // The player's fake clock moves on only while a waiter tells it it is blocked.
+            exo.clock,
         )
         assertEquals(Uri.fromFile(download), exo.currentMediaItem?.localConfiguration?.uri)
         assertTrue("${player.state.value.positionMs}", player.state.value.positionMs in 1_900..2_100)

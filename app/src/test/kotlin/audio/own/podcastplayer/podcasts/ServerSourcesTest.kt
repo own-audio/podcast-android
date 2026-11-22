@@ -80,7 +80,7 @@ private const val FEED = "https://feeds.example.com/show.xml"
 /** One MockWebServer answering through [handler], every request kept. */
 private class Stub(private val handler: (RecordedRequest) -> MockResponse) : AutoCloseable {
     val server = MockWebServer()
-    val requests: MutableList<RecordedRequest> = Collections.synchronizedList(mutableListOf())
+    val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -151,7 +151,7 @@ private fun shelf() = Stub { request ->
 
 /** A gPodder server keeping subscriptions per device: the uploads it got are kept. */
 private class GPodder : AutoCloseable {
-    val uploads: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    val uploads: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val stub = Stub { request ->
         val path = request.url.encodedPath
         when {

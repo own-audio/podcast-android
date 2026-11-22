@@ -41,7 +41,7 @@ internal fun flacBytes(size: Int = 4096): ByteArray = ByteArray(size) { i -> if 
 /** Records what the manager asked of WorkManager, and says what "runs". */
 internal class FakeScheduler : DownloadScheduler {
     val running: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
-    val enqueued: MutableList<Pair<String, Boolean>> = Collections.synchronizedList(ArrayList())
+    val enqueued: MutableList<Pair<String, Boolean>> = java.util.concurrent.CopyOnWriteArrayList()
     var cancelledAll = 0
     override suspend fun active(): Set<String> = running.toSet()
     override fun enqueue(key: String, wifiOnly: Boolean, replace: Boolean) {
@@ -67,7 +67,7 @@ internal class TestSettings(var wifiOnly: Boolean = true, var cap: Long? = null,
 class DownloadWorkerTest {
     private val context = RuntimeEnvironment.getApplication()
     private lateinit var server: MockWebServer
-    private val requests: MutableList<RecordedRequest> = Collections.synchronizedList(ArrayList())
+    private val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
     private var answer: (RecordedRequest) -> MockResponse = { MockResponse.Builder().code(404).build() }
     private lateinit var db: DownloadsDatabase
     private lateinit var root: File
@@ -76,7 +76,7 @@ class DownloadWorkerTest {
     private val settings = TestSettings()
     private val resolves = AtomicInteger()
     private var link: () -> PlaybackLink = { PlaybackLink(server.url("/file").toString()) }
-    private val holdings = Collections.synchronizedList(ArrayList<Map<String, List<String>>>())
+    private val holdings = java.util.concurrent.CopyOnWriteArrayList<Map<String, List<String>>>()
     private lateinit var downloads: Downloads
 
     @Before
@@ -284,7 +284,7 @@ class DownloadWorkerTest {
     fun `progress is reported to the screens while it runs`() = runBlocking {
         answer = { audio(mp3Bytes(200_000)) }
         downloads.download(listOf(request("t1")))
-        val seen = Collections.synchronizedList(ArrayList<Float>())
+        val seen = java.util.concurrent.CopyOnWriteArrayList<Float>()
         val watch = scope.launch { downloads.progress.collect { map -> seen += map.values } }
         worker("srv|t1").doWork()
         delay(100)

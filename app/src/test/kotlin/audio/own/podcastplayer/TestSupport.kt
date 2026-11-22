@@ -36,7 +36,7 @@ import okhttp3.OkHttpClient
  */
 class FakeOwnAudio : AutoCloseable {
     val server = MockWebServer()
-    val requests: MutableList<RecordedRequest> = Collections.synchronizedList(mutableListOf())
+    val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
 
     var identity = "srv-1"
     var revision = 17
@@ -200,7 +200,7 @@ fun mainThread() = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
 /** Downloads that only remember what they were asked; [finish] makes one done. */
 class FakeDownloader : audio.own.podcastplayer.downloads.EpisodeDownloader {
-    val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    val calls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     private val _state = MutableStateFlow(audio.own.podcastplayer.downloads.DownloadsState(loaded = true))
     override val state: kotlinx.coroutines.flow.StateFlow<audio.own.podcastplayer.downloads.DownloadsState> = _state
     var clock = 1_000L

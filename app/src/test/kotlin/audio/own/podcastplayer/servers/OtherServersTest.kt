@@ -35,7 +35,7 @@ private fun status(code: Int) = MockResponse.Builder().code(code).build()
 /** A pretend server of another kind: own.audio's discovery is not there, [route] answers the rest. */
 private class FakeServer(private val route: (RecordedRequest) -> MockResponse?) : AutoCloseable {
     val server = MockWebServer()
-    val requests: MutableList<RecordedRequest> = Collections.synchronizedList(mutableListOf())
+    val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -74,7 +74,7 @@ private const val JWT = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE4OTM0NTYwMDB9.c2ln"
 
 /** podfetch: its own config path, a 403 for a wrong password, a 409 for its admin. */
 private class Podfetch : AutoCloseable {
-    val devices: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
+    val devices: MutableList<Pair<String, String>> = java.util.concurrent.CopyOnWriteArrayList()
     val fake = FakeServer { request ->
         val path = request.url.encodedPath
         val auth = request.headers["Authorization"]

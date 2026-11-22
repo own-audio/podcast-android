@@ -17,7 +17,7 @@ import okio.Buffer
  */
 class FixtureFeedServer : AutoCloseable {
     val server = MockWebServer()
-    val requests: MutableList<RecordedRequest> = Collections.synchronizedList(mutableListOf())
+    val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
 
     /** Episodes the feed gains, newest first, as a publisher adds them. */
     @Volatile var extraEpisodes: List<String> = emptyList()

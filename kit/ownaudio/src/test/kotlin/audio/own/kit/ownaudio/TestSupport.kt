@@ -11,7 +11,7 @@ import okhttp3.OkHttpClient
 /** A MockWebServer that answers with [answer] and keeps every request it saw. */
 class StubServer(private val answer: (RecordedRequest) -> MockResponse) : AutoCloseable {
     val server = MockWebServer()
-    val requests: MutableList<RecordedRequest> = Collections.synchronizedList(mutableListOf())
+    val requests: MutableList<RecordedRequest> = java.util.concurrent.CopyOnWriteArrayList()
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -81,7 +81,7 @@ fun RecordedRequest.form(): Map<String, String> = text().split("&").filter { it.
 
 /** Keeps every save, in order. */
 class RecordingStore : TokenStore {
-    val saved: MutableList<Tokens?> = Collections.synchronizedList(mutableListOf())
+    val saved: MutableList<Tokens?> = java.util.concurrent.CopyOnWriteArrayList()
     override suspend fun save(tokens: Tokens?) {
         saved += tokens
     }

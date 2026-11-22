@@ -39,7 +39,7 @@ import org.robolectric.annotation.Config
 private class RecordingScheduler(private val isAutomatic: (String) -> Boolean) : DownloadScheduler {
     data class Enqueued(val key: String, val wifiOnly: Boolean, val replace: Boolean, val automatic: Boolean)
 
-    val enqueued: MutableList<Enqueued> = Collections.synchronizedList(mutableListOf())
+    val enqueued: MutableList<Enqueued> = java.util.concurrent.CopyOnWriteArrayList()
     private val running = Collections.synchronizedSet(HashSet<String>())
 
     override suspend fun active(): Set<String> = running.toSet()
@@ -65,7 +65,7 @@ class EpisodeDownloadsTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val server = MockWebServer().apply { start() }
     private var answer: Playback? = null
-    private val holdings: MutableList<Pair<String, List<String>>> = Collections.synchronizedList(mutableListOf())
+    private val holdings: MutableList<Pair<String, List<String>>> = java.util.concurrent.CopyOnWriteArrayList()
     private lateinit var scheduler: RecordingScheduler
 
     private val serverId = UUID.fromString("6f1c0a52-0000-4000-8000-000000000001")

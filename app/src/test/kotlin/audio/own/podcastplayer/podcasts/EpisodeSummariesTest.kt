@@ -33,7 +33,7 @@ import org.junit.Test
 
 /** A summaries service that only answers; nothing here is paid, nothing reaches a server. */
 private class FakeAI : EpisodeAI {
-    val calls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    val calls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val summaries = HashMap<SummaryLength, EpisodeSummary>()
     val turns = mutableListOf(EpisodeAnswer("q1", "Who speaks?", "Two hosts.", 3_000))
     var refusal: Int? = null

@@ -101,7 +101,7 @@ class WireFormatTest {
 
     @Test
     fun `a 429 waits what Retry-After says, then retries`() = runTest {
-        val sleeps = Collections.synchronizedList(mutableListOf<Long>())
+        val sleeps = java.util.concurrent.CopyOnWriteArrayList<Long>()
         rateLimited({ MockResponse429("3") }).use { stub ->
             val client = AudiobookshelfClient(stub.host, legacyTokens(), testHttp(sleeps))
             assertEquals(emptyList<Library>(), client.bookLibraries())
@@ -112,7 +112,7 @@ class WireFormatTest {
 
     @Test
     fun `without Retry-After the wait doubles, and gives up after two retries`() = runTest {
-        val sleeps = Collections.synchronizedList(mutableListOf<Long>())
+        val sleeps = java.util.concurrent.CopyOnWriteArrayList<Long>()
         rateLimited({ MockResponse429() }, { MockResponse429() }, { MockResponse429() }).use { stub ->
             val client = AudiobookshelfClient(stub.host, legacyTokens(), testHttp(sleeps))
             try {
@@ -128,7 +128,7 @@ class WireFormatTest {
 
     @Test
     fun `a server asking for minutes is not waited on`() = runTest {
-        val sleeps = Collections.synchronizedList(mutableListOf<Long>())
+        val sleeps = java.util.concurrent.CopyOnWriteArrayList<Long>()
         rateLimited({ MockResponse429("900") }).use { stub ->
             val client = AudiobookshelfClient(stub.host, legacyTokens(), testHttp(sleeps))
             try {
@@ -145,7 +145,7 @@ class WireFormatTest {
     @Test
     fun `a 429 on a write is retried with the same body`() = runTest {
         val sleeps = mutableListOf<Long>()
-        val bodies = Collections.synchronizedList(mutableListOf<String>())
+        val bodies = java.util.concurrent.CopyOnWriteArrayList<String>()
         val queue = mutableListOf({ MockResponse429("1") })
         Stub { request ->
             bodies += request.body?.utf8() ?: ""
@@ -175,7 +175,7 @@ class WireFormatTest {
 
     @Test
     fun `failures are logged with the path, never the query or a token`() = runTest {
-        val log = Collections.synchronizedList(mutableListOf<String>())
+        val log = java.util.concurrent.CopyOnWriteArrayList<String>()
         Stub { text("Forbidden", 403) }.use { stub ->
             val client = AudiobookshelfClient(stub.host, legacyTokens("secret-token"), testHttp(log = log))
             try {
