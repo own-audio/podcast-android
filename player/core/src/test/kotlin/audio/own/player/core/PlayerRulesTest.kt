@@ -59,7 +59,7 @@ class PlayerRulesTest {
     fun `the start position goes with the items`() {
         player.setMediaItems(items, 1, 1_500)
         player.prepare()
-        run(player).untilState(Player.STATE_READY)
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_READY)
         assertEquals(1, player.currentMediaItemIndex)
         assertTrue("at ${player.currentPosition}", player.currentPosition in 1_400..1_600)
     }
@@ -69,12 +69,12 @@ class PlayerRulesTest {
         val focus = AudioFocusOnFirstPlay(PlayerSetup.audioAttributes(ContentKind.MUSIC))
         player.setMediaItems(items, 0, 0)
         player.prepare()
-        run(player).untilState(Player.STATE_READY)
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_READY)
         assertNull(shadowOf(audioManager).lastAudioFocusRequest)
 
         focus.beforePlay(player)
         player.play()
-        run(player).untilPendingCommandsAreFullyHandled()
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         assertNotNull(shadowOf(audioManager).lastAudioFocusRequest)
         assertTrue(focus.isEnabled)
     }
@@ -97,7 +97,7 @@ class PlayerRulesTest {
 
         IdleDecoderRelease.prepareIfIdle(player)
         player.play()
-        run(player).untilState(Player.STATE_READY)
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_READY)
         assertEquals(0, player.currentMediaItemIndex)
         assertTrue(player.currentPosition >= position)
         release.dispose()
@@ -112,11 +112,11 @@ class PlayerRulesTest {
         focus.beforePlay(player)
         player.play()
         advance(player).untilPosition(0, 1_000)
-        run(player).untilPendingCommandsAreFullyHandled()
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
 
         val request = shadowOf(audioManager).lastAudioFocusRequest
         request.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
-        run(player).untilPendingCommandsAreFullyHandled()
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         assertFalse(player.isPlaying)
         assertTrue("a call is not a pause", player.playWhenReady)
         val position = player.currentPosition
@@ -125,7 +125,7 @@ class PlayerRulesTest {
         assertEquals("not released during a call", Player.STATE_READY, player.playbackState)
 
         request.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
-        run(player).untilPendingCommandsAreFullyHandled()
+        run(player).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         assertTrue(player.isPlaying)
         assertEquals(1.0f, player.volume)
         advance(player).untilPosition(0, position + 500)
@@ -133,3 +133,6 @@ class PlayerRulesTest {
         release.dispose()
     }
 }
+
+/** Generous: CI's machines are much slower than a laptop, and a test player that stalls fails anyway. */
+private const val RUN_TIMEOUT_MS = 60_000L

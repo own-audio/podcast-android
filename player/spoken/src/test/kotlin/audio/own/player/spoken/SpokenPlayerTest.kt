@@ -67,7 +67,7 @@ class SpokenPlayerTest {
 
     private fun book(chapters: List<SpokenChapter> = emptyList()) = SpokenBook("srv|b1", "A Book", "An Author", parts = parts, serverChapters = chapters)
 
-    private fun ready() = run(exo).untilState(Player.STATE_READY)
+    private fun ready() = run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_READY)
 
     @Test
     fun `a position in book time lands in the right file`() {
@@ -207,7 +207,7 @@ class SpokenPlayerTest {
         spoken.load(book(chapters), 2_000, autoplay = true)
         spoken.sleepAt(SleepEnd.END_OF_CHAPTER)
         assertEquals(SleepEnd.END_OF_CHAPTER, spoken.state.value.sleepEnd)
-        run(exo).untilPlayWhenReadyIs(false)
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilPlayWhenReadyIs(false)
         assertTrue("at ${spoken.positionMs()}", spoken.positionMs() in 2_700..3_100)
         assertEquals(null, spoken.state.value.sleepEnd)
     }
@@ -220,8 +220,8 @@ class SpokenPlayerTest {
         spoken.sleepAt(SleepEnd.END_OF_BOOK)
         advance(exo).untilPosition(1, 500)
         assertTrue("End of Book doesn't stop at the end of a file", exo.playWhenReady)
-        run(exo).untilState(Player.STATE_ENDED)
-        run(exo).untilPendingCommandsAreFullyHandled()
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_ENDED)
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         assertEquals("srv|b1", finished)
         assertTrue(reports.last().finished)
         assertEquals(ReportReason.FINISHED, reports.last().reason)
@@ -274,3 +274,6 @@ class SpokenPlayerTest {
         withWindow.release()
     }
 }
+
+/** Generous: CI's machines are much slower than a laptop, and a test player that stalls fails anyway. */
+private const val RUN_TIMEOUT_MS = 60_000L

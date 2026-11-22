@@ -85,7 +85,7 @@ class PodcastPlayerTest {
     }
 
     private fun ready() {
-        run(exo).untilState(Player.STATE_READY)
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_READY)
         idle()
     }
 
@@ -110,7 +110,7 @@ class PodcastPlayerTest {
     fun `the file's chapters when the feed has none, the feed's when it has them`() {
         player.load(episode("e1", 6_000), show, 0, autoplay = false, rate = 1f)
         ready()
-        run(exo).untilPendingCommandsAreFullyHandled()
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         repeat(20) { if (player.state.value.chapters.isEmpty()) Thread.sleep(20).also { idle() } }
         assertTrue("read from the file", player.state.value.chapters.isNotEmpty())
 
@@ -155,8 +155,8 @@ class PodcastPlayerTest {
         assertNull(player.state.value.item)
 
         player.load(episode("e3", 3_000), show, 4_000, autoplay = true, rate = 1f)
-        run(exo).untilState(Player.STATE_ENDED)
-        run(exo).untilPendingCommandsAreFullyHandled()
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_ENDED)
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         val last = reports.last()
         assertEquals(PodcastPlayer.Reason.FINISHED, last.reason)
         assertTrue("at the file's end, not the feed's: ${last.positionMs}", last.positionMs in 5_900..6_100)
@@ -169,8 +169,8 @@ class PodcastPlayerTest {
         player.sleepAtEndOfEpisode()
         idle()
         assertTrue(player.state.value.sleepAtEndOfEpisode)
-        run(exo).untilState(Player.STATE_ENDED)
-        run(exo).untilPendingCommandsAreFullyHandled()
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilState(Player.STATE_ENDED)
+        run(exo).withTimeoutMs(RUN_TIMEOUT_MS).untilPendingCommandsAreFullyHandled()
         assertFalse(ended.single().second)
     }
 
@@ -188,3 +188,6 @@ class PodcastPlayerTest {
         advance(exo).untilPendingCommandsAreFullyHandled()
     }
 }
+
+/** Generous: CI's machines are much slower than a laptop, and a test player that stalls fails anyway. */
+private const val RUN_TIMEOUT_MS = 60_000L
