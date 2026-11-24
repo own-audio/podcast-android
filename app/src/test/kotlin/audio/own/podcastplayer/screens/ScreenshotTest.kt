@@ -103,7 +103,7 @@ class ScreenshotTest {
 
     @Composable
     private fun Account() = OwnAudioAccountContent(
-        state = AccountState(AccountMode.SIGN_UP, name = "Alex", email = "alex@example.com", googleClientId = "web"),
+        state = AccountState(AccountMode.SIGN_UP, name = "Alex", email = "alex@example.com", googleClientId = "web", appleWeb = true),
         showGoogle = true,
         onCancel = {}, onName = {}, onEmail = {}, onPassword = {}, onSubmit = {}, onGoogle = {},
     )

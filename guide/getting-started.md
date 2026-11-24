@@ -26,8 +26,13 @@ them, on every device.
 - **Try the Demo Library** signs in to a shared own.audio server with sample shows, with no
   account needed.
 
-In the Google Play build, both pages also have **Continue with Google**, which makes the
-account on first use. The F-Droid build has no Google sign-in; use your email and password.
+Both pages also have **Continue with Apple** and, in the Google Play build, **Continue with
+Google**; either makes the account on first use. The F-Droid build has no Google sign-in.
+
+**Continue with Apple** opens Apple's sign-in page in your browser, in both builds. When you are
+done there, the browser hands you back to the app, which finishes signing in. If you close the
+browser or tap Cancel at Apple, nothing happens and you are back on the same screen. It needs a
+web browser on the phone, and the own.audio server has to offer it.
 
 Under **Or listen without an account**:
 
@@ -85,8 +90,9 @@ You only need this if you run a server or have an account on one.
 4. Tap **Add**.
 
 For own.audio's hosted service, type just `own.audio` as the address. A home server's address
-can be typed without `https://`; the app tries https first and then http. In the Google Play
-build, **Continue with Google** appears under the form when the own.audio server accepts it.
+can be typed without `https://`; the app tries https first and then http. **Continue with
+Apple** and (in the Google Play build) **Continue with Google** appear under the form when the
+own.audio server offers them.
 If your account has two-factor sign-in, the app then asks for the code from your authenticator
 app, or one of your recovery codes.
 

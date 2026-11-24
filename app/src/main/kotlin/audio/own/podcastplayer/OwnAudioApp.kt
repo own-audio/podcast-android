@@ -7,14 +7,17 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import audio.own.core.sync.PeriodicRefresh
+import audio.own.podcastplayer.apple.AppleRedirects
 import audio.own.core.servers.MobileData
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class OwnAudioApp : Application(), Configuration.Provider {
+class OwnAudioApp : Application(), Configuration.Provider, AppleRedirects {
     lateinit var container: AppContainer
         private set
+
+    override fun appleRedirected(code: String?, error: String?, state: String?) = container.appleSignIn.redirected(code, error, state)
 
     override fun onCreate() {
         super.onCreate()

@@ -57,6 +57,21 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Sign in with Apple: the browser comes back to <applicationId>:/apple. A filter can't name a
+             path without a host, so the activity checks the path itself and reads nothing else. -->
+        <activity
+            android:name=".apple.AppleRedirectActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${applicationId}" />
+            </intent-filter>
+        </activity>
         <service
             android:name=".playback.PodcastService"
             android:exported="true"

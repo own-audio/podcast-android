@@ -20,6 +20,7 @@
     <string name="downloading_n_of_m">Stahuje se %1$d z %2$d</string>
     <string name="shared_with_family">Sdíleno s rodinou</string>
     <string name="continue_with_google">Pokračovat přes Google</string>
+    <string name="continue_with_apple">Pokračovat přes Apple</string>
     <string name="free_and_open_source">Zdarma a s otevřeným kódem · MPL-2.0</string>
     <string name="accent_color">Barva zvýraznění</string>
     <string name="accent_footer">Pro tlačítka, odkazy a to, co hraje. Ikona a widgety si ponechají barvu aplikace.</string>
@@ -60,6 +61,8 @@
     <string name="quick_connect">Přihlásit přes Quick Connect (Jellyfin)</string>
     <string name="quick_connect_footer">Quick Connect přihlásí k Jellyfinu pomocí kódu, který schválíte v aplikaci Jellyfin, kde už jste přihlášeni; heslo se tu nezadává.</string>
     <string name="google_on_this_server">Nebo se přihlaste účtem Google, který na tomto serveru own.audio používáte.</string>
+    <string name="apple_on_this_server">Nebo se přihlaste účtem Apple, který na tomto serveru own.audio používáte.</string>
+    <string name="apple_or_google_on_this_server">Nebo se přihlaste účtem Apple nebo Google, který na tomto serveru own.audio používáte.</string>
     <string name="onboarding_note_own_audio">own.audio: přihlaste se e-mailem a heslem ke svému účtu.</string>
     <string name="onboarding_note_https">Bez http:// nebo https:// aplikace zkusí https a pak http, takže server doma funguje tak, jak ho napíšete.</string>
     <string name="or_create_with_email">Nebo si účet vytvořte e-mailem.</string>
@@ -96,6 +99,8 @@
     <string name="sign_in_refused_warning">Server už toto přihlášení nepřijímá.</string>
     <string name="sign_in_again">Přihlásit se znovu</string>
     <string name="sign_in_again_google_footer">Pokud jste se zaregistrovali přes Google, přihlaste se stejně.</string>
+    <string name="sign_in_again_apple_footer">Pokud jste se zaregistrovali přes Apple, přihlaste se stejně.</string>
+    <string name="sign_in_again_apple_google_footer">Pokud jste se zaregistrovali přes Apple nebo Google, přihlaste se stejně.</string>
     <string name="delete_account_ellipsis">Smazat účet…</string>
     <string name="account">Účet</string>
     <string name="signed_in_as">Přihlášeno jako %1$s. Stažené skladby a knihovna v tomto zařízení zůstanou, jak jsou.</string>
@@ -139,6 +144,10 @@
     <string name="error_wrong_code">Kód není správný, nebo už vypršel. Zadejte aktuální.</string>
     <string name="error_different_server">Na této adrese teď odpovídá jiný server. Přidejte ho jako nový server.</string>
     <string name="error_identity_conflict">Účet s tímto e-mailem už existuje. Přihlaste se jeho heslem.</string>
+    <string name="error_apple_failed">Apple nevrátil přihlášení. Zkuste to znovu.</string>
+    <string name="error_apple_expired">Toto přihlášení přes Apple vypršelo. Zkuste to znovu.</string>
+    <string name="error_apple_state">Tato odpověď od Applu nepatří k tomuto přihlášení. Zkuste to znovu.</string>
+    <string name="error_no_browser">Přihlášení přes Apple otevírá webový prohlížeč a v tomto zařízení žádný není. Nainstalujte nebo zapněte prohlížeč a zkuste to znovu.</string>
     <string name="error_too_old">Tento server own.audio je pro tuto aplikaci příliš starý. Aktualizujte ho na verzi 1.0.4 nebo novější.</string>
     <string name="error_later_version">Tento druh serveru přijde v některé z dalších verzí.</string>
     <string name="error_invalid_email">Tohle nevypadá jako e-mailová adresa.</string>

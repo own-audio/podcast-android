@@ -4,7 +4,9 @@ import audio.own.core.servers.InMemoryAddressMemory
 import audio.own.core.servers.NetworkState
 import audio.own.core.servers.SecretBox
 import audio.own.core.servers.ServerStore
+import audio.own.kit.ownaudio.Grants
 import audio.own.kit.ownaudio.OwnAudioClient
+import audio.own.kit.ownaudio.Pkce
 import audio.own.kit.ownaudio.TokenSessions
 import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.MemoryPreferences
@@ -41,6 +43,10 @@ class FakeOwnAudio : AutoCloseable {
     var identity = "srv-1"
     var revision = 17
     var google = true
+    /** Sign in with Apple in the browser, advertised in discovery. */
+    var appleWeb = true
+    /** One-time Apple codes the browser could bring back, each with the PKCE challenge it was made for. */
+    val appleCodes: MutableMap<String, String> = java.util.concurrent.ConcurrentHashMap()
     var demo: Pair<String, String>? = null
     var password = "right password"
     var twoFactorFor: String? = null
@@ -98,7 +104,7 @@ class FakeOwnAudio : AutoCloseable {
         val demoPart = demo?.let { ",\"demo\":{\"email\":\"${it.first}\",\"password\":\"${it.second}\"}" } ?: ""
         return """{"id":"$identity","name":"own.audio","edition":"foss","version":"1.0.5",
             "api":[{"version":2,"path":"/api/v2","revision":$revision,"status":"stable"}],
-            "auth":{"password":true,"providers":$providers,"grants":["password","refresh_token"],"clients":$clients},
+            "auth":{"password":true,"providers":$providers,"grants":["password","refresh_token"],"clients":$clients,"apple_web":$appleWeb},
             "modules":{},"addresses":[{"url":"http://192.168.1.10:8080","scope":"lan"}]$demoPart}"""
     }
 
@@ -110,6 +116,14 @@ class FakeOwnAudio : AutoCloseable {
         }
         "urn:own-audio:params:oauth:grant-type:mfa-otp" -> if (form["otp"] == "123456") json(TOKENS) else problem("invalid_grant", 400)
         "urn:ietf:params:oauth:grant-type:jwt-bearer" -> if (form["assertion"] == "good-id-token") json(TOKENS) else problem("identity_conflict", 409)
+        Grants.APPLE_CODE -> {
+            val challenge = form["code"]?.let { appleCodes.remove(it) }
+            when {
+                challenge == null || form["code_verifier"]?.let(Pkce::challenge) != challenge -> problem("invalid_grant", 400)
+                form["code"] == MFA_APPLE_CODE -> problem("mfa_required", 403, ",\"mfa_token\":\"mfa-1\",\"mfa_methods\":[\"totp\"]")
+                else -> json(TOKENS)
+            }
+        }
         "refresh_token" -> if (refreshRefused) problem("invalid_grant", 400) else json(TOKENS)
         else -> problem("unsupported_grant_type", 400)
     }
@@ -117,6 +131,8 @@ class FakeOwnAudio : AutoCloseable {
     override fun close() = server.close()
 
     companion object {
+        /** An Apple code whose account has two-factor sign-in. */
+        const val MFA_APPLE_CODE = "apple-mfa"
         const val TOKENS = """{"access_token":"a1","token_type":"Bearer","expires_in":3600,"refresh_token":"r1","scope":""}"""
         const val ME = """{"id":"u1","email":"a@example.com","display_name":"Alex","family":{"id":"f1","role":"admin","can_upload":true}}"""
         const val FAMILY = """{"id":"f1","name":"Home","me":{"user_id":"u1","role":"admin"}}"""

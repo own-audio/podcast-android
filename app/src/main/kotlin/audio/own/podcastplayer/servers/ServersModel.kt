@@ -30,11 +30,13 @@ import audio.own.kit.ownaudio.AnswerCache
 import audio.own.kit.ownaudio.Discovery
 import audio.own.kit.ownaudio.OwnAudioClient
 import audio.own.kit.ownaudio.OwnAudioException
+import audio.own.kit.ownaudio.Pkce
 import audio.own.kit.ownaudio.SignInState
 import audio.own.kit.ownaudio.TokenSession
 import audio.own.kit.ownaudio.TokenSessions
 import audio.own.kit.ownaudio.TokenStore
 import audio.own.kit.ownaudio.Tokens
+import audio.own.kit.ownaudio.appleStartUrl
 import audio.own.kit.ownaudio.deleteAccount
 import audio.own.kit.ownaudio.discover
 import audio.own.kit.ownaudio.finishTwoFactor
@@ -42,6 +44,7 @@ import audio.own.kit.ownaudio.me
 import audio.own.kit.ownaudio.register
 import audio.own.kit.ownaudio.revokeAllSessions
 import audio.own.kit.ownaudio.signIn
+import audio.own.kit.ownaudio.signInWithApple
 import audio.own.kit.ownaudio.signOut
 import audio.own.podcastplayer.app.AppLog
 import audio.own.podcastplayer.app.AppPreferences
@@ -394,26 +397,68 @@ class ServersModel(
      * The web client id to ask Google for a token with, when the own.audio server at [address]
      * offers Google; null otherwise (and for anything that isn't own.audio).
      */
-    suspend fun googleClientId(address: String): String? {
+    suspend fun googleClientId(address: String): String? = signInOptions(address).googleClientId
+
+    suspend fun googleClientIdFor(serverId: String): String? = signInOptionsFor(serverId).googleClientId
+
+    /** The sign-ins besides a password that the own.audio server at [address] offers, from one look at its discovery. */
+    suspend fun signInOptions(address: String): SignInOptions {
         val candidates = TypedAddress.candidates(address).filter { it.toHttpUrlOrNull() != null }
         for (host in candidates) {
             val found = detector.discovery(host) ?: continue
-            return googleClientId(found)
+            return signInOptions(found)
         }
-        return null
+        return SignInOptions()
     }
 
-    suspend fun googleClientIdFor(serverId: String): String? {
-        val record = _state.value.server(serverId) ?: return null
-        return detector.discovery(record.host)?.let(::googleClientId)
+    suspend fun signInOptionsFor(serverId: String): SignInOptions {
+        val record = _state.value.server(serverId) ?: return SignInOptions()
+        return detector.discovery(record.host)?.let(::signInOptions) ?: SignInOptions()
     }
+
+    private fun signInOptions(discovery: Discovery) = SignInOptions(googleClientId(discovery), discovery.supportsAppleWeb)
 
     private fun googleClientId(discovery: Discovery): String? =
         discovery.auth.clients.google?.web?.takeIf { "google" in discovery.auth.providers && it.isNotBlank() }
 
+    // region Sign in with Apple, through the browser
+
+    /**
+     * The own.audio server at [address] and its page that starts Sign in with Apple, for the
+     * browser. Nothing is saved until [signInWithApple] gets the code back.
+     */
+    suspend fun appleStart(address: String, redirectUri: String, pkce: Pkce, state: String): AppleStart {
+        val found = detector.detect(address, ServerKinds.OWN_AUDIO) as? Detected.OwnAudio ?: throw UserFacingException(R.string.error_not_own_audio)
+        if (!found.discovery.supportsAppleWeb) throw UserFacingException(R.string.error_provider_off)
+        return AppleStart(found.host, unsigned(found.host).appleStartUrl(redirectUri, pkce.challenge, state).toString())
+    }
+
+    /** The one-time code the browser brought back from [appleStart]'s [host], exchanged for the API's tokens. */
+    suspend fun signInWithApple(host: String, code: String, codeVerifier: String, name: String, replacing: String? = null) {
+        val found = detector.detect(host, ServerKinds.OWN_AUDIO) as? Detected.OwnAudio ?: throw UserFacingException(R.string.error_not_own_audio)
+        val tokens = try {
+            unsigned(found.host).signInWithApple(code, codeVerifier, device)
+        } catch (p: OwnAudioException.Problem) {
+            if (p.code == "mfa_required" && p.mfaToken != null) {
+                _state.update { it.copy(pendingTwoFactor = PendingTwoFactor(found.host, p.mfaToken!!, name, found.discovery, replacing)) }
+                throw TwoFactorNeeded
+            }
+            if (p.code == "identity_conflict") throw UserFacingException(R.string.error_identity_conflict, p)
+            // The code lives a few minutes and works once: a fresh start gets a new one.
+            if (p.code == "invalid_grant") throw UserFacingException(R.string.error_apple_expired, p)
+            throw signInProblem(p)
+        } catch (e: OwnAudioException.Network) {
+            throw UserFacingException(R.string.error_unreachable, e)
+        }
+        finishOwnAudio(tokens, found.host, found.discovery, name, replacing)
+    }
+
+    // endregion
+
     private fun signInProblem(p: OwnAudioException.Problem): UserFacingException = UserFacingException(
         when {
             p.code == "invalid_grant" || p.code == "invalid_credentials" -> R.string.error_rejected
+            p.code == "registration_closed" -> R.string.error_registration_closed
             p.status == 429 -> R.string.error_rate_limited
             else -> R.string.error_rejected
         },
@@ -849,6 +894,12 @@ class ServersModel(
 }
 
 /** Not a failure: the code is asked for next ([ServersState.pendingTwoFactor]). */
+/** Google's web client id when the server offers Google, and whether it runs Sign in with Apple in the browser. */
+data class SignInOptions(val googleClientId: String? = null, val appleWeb: Boolean = false)
+
+/** Where a Sign in with Apple starts: the server's root as found, and the page to open in the browser. */
+data class AppleStart(val host: String, val url: String)
+
 object TwoFactorNeeded : Exception("two-factor code needed") {
     private fun readResolve(): Any = TwoFactorNeeded
 }

@@ -49,7 +49,14 @@ class MainActivity : AppCompatActivity() {
         container.podcasts.setForeground(true)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Back from the browser without its answer: Sign in with Apple was closed.
+        container.appleSignIn.appReturned()
+    }
+
     override fun onStop() {
+        container.appleSignIn.appLeft()
         container.podcasts.setForeground(false)
         super.onStop()
     }

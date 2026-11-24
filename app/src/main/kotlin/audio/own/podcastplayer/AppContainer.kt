@@ -19,6 +19,9 @@ import audio.own.podcastplayer.app.DataStorePreferences
 import audio.own.podcastplayer.app.LoggingInterceptor
 import audio.own.podcastplayer.servers.ServerDetector
 import audio.own.podcastplayer.servers.ServersModel
+import audio.own.podcastplayer.apple.AppleSignIn
+import audio.own.podcastplayer.apple.FilePendingAppleStore
+import audio.own.kit.ownaudio.AppleWeb
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -138,6 +141,15 @@ class AppContainer(context: Context) {
         log = log,
         scope = scope,
         foreground = foreground,
+    )
+
+    /** Sign in with Apple through the browser; a sign-in waiting for it outlives the process. */
+    val appleSignIn = AppleSignIn(
+        servers = servers,
+        store = FilePendingAppleStore(File(app.noBackupFilesDir, "apple-sign-in.json")),
+        redirectUri = AppleWeb.redirectUri(app.packageName),
+        log = log,
+        scope = scope,
     )
 
     /** Where every part of the podcast library is kept. */

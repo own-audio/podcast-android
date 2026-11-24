@@ -93,5 +93,5 @@ then leaves your server.
 On the server's page, **Delete Account…** deletes your account on that server for good, with
 everything you added to it: music, audiobooks, podcasts, playlists and your listening history.
 What others in your family added stays with them. Your password confirms it; an account that
-signs in with Google leaves it empty. The server's only admin can't delete their account this
+signs in with Apple or Google leaves it empty. The server's only admin can't delete their account this
 way, and the shared demo account can't be deleted.

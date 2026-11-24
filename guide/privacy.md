@@ -19,6 +19,8 @@ and no tracking. The full policy is in
   catalog, Discover asks your server instead.
 - **The servers you add**, and only those: your sign-in, your shows, what you play, your
   positions and played marks.
+- **Apple**, only if you choose **Continue with Apple** for an own.audio server. Apple's page
+  opens in your browser; the app gets nothing from Apple directly, the own.audio server does;
 - **Google**, only if you choose **Continue with Google** for an own.audio server. Only the
   Google Play build has it; the F-Droid build has no Google code.
 

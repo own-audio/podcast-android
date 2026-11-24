@@ -55,6 +55,9 @@ object Grants {
     const val REFRESH = "refresh_token"
     const val MFA_OTP = "urn:own-audio:params:oauth:grant-type:mfa-otp"
     const val JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+
+    /** The one-time code of the browser's Sign in with Apple ([signInWithApple]). */
+    const val APPLE_CODE = "urn:own-audio:params:oauth:grant-type:apple-code"
 }
 
 // region Before signing in

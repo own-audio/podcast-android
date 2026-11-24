@@ -21,7 +21,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import audio.own.core.designsystem.components.AppleSignInButton
 import audio.own.core.designsystem.components.GoogleSignInButton
+import audio.own.podcastplayer.apple.AppleSignIn
+import audio.own.podcastplayer.apple.followApple
 import audio.own.podcastplayer.ui.Section
 import audio.own.core.designsystem.theme.LocalPalette
 import audio.own.core.designsystem.theme.Tokens
@@ -53,10 +56,13 @@ data class AccountState(
     val working: Boolean = false,
     val error: UiText? = null,
     val googleClientId: String? = null,
+    /** own.audio runs Sign in with Apple in the browser. */
+    val appleWeb: Boolean = false,
+    val appleWorking: Boolean = false,
     val done: Boolean = false,
 ) {
     val canSubmit: Boolean
-        get() = '@' in email && !working && when (mode) {
+        get() = '@' in email && !working && !appleWorking && when (mode) {
             AccountMode.SIGN_UP -> name.isNotBlank() && password.length >= 12
             AccountMode.SIGN_IN -> password.isNotEmpty()
         }
@@ -71,17 +77,28 @@ class OwnAudioAccountViewModel(
     private val servers: ServersModel,
     private val log: AppLog,
     googleAvailable: Boolean,
+    private val apple: AppleSignIn? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(AccountState(mode))
     val state: StateFlow<AccountState> = _state.asStateFlow()
 
     init {
         viewModelScope.launch { servers.signedIn.collect { _state.update { it.copy(done = true) } } }
-        if (googleAvailable) {
+        if (googleAvailable || apple != null) {
             viewModelScope.launch {
-                val id = servers.googleClientId(servers.hostedService)
-                _state.update { it.copy(googleClientId = id) }
+                val options = servers.signInOptions(servers.hostedService)
+                _state.update {
+                    it.copy(googleClientId = options.googleClientId.takeIf { googleAvailable }, appleWeb = apple != null && options.appleWeb)
+                }
             }
+        }
+        apple?.let {
+            viewModelScope.followApple(
+                it, AppleSignIn.ORIGIN_ACCOUNT,
+                onBusy = { busy -> _state.update { s -> s.copy(appleWorking = busy) } },
+                onError = { text -> _state.update { s -> s.copy(error = text) } },
+                onDone = { _state.update { s -> s.copy(done = true) } },
+            )
         }
     }
 
@@ -107,6 +124,14 @@ class OwnAudioAccountViewModel(
     fun googleFailed(reason: String) {
         log.error("google", "sign-in with Google unavailable: $reason")
         _state.update { it.copy(googleClientId = null) }
+    }
+
+    /** Opens own.audio's Sign in with Apple in the browser; the outcome comes back through [AppleSignIn]. */
+    fun signInWithApple() {
+        val apple = apple ?: return
+        if (_state.value.working || _state.value.appleWorking) return
+        _state.update { it.copy(error = null) }
+        apple.begin(servers.hostedService, "", null, AppleSignIn.ORIGIN_ACCOUNT)
     }
 
     private fun run(work: suspend () -> Unit) {
@@ -136,6 +161,7 @@ fun OwnAudioAccountContent(
     onPassword: (String) -> Unit,
     onSubmit: () -> Unit,
     onGoogle: () -> Unit,
+    onApple: () -> Unit = {},
 ) {
     val signUp = state.mode == AccountMode.SIGN_UP
     val links = LocalUriHandler.current
@@ -144,12 +170,14 @@ fun OwnAudioAccountContent(
         onBack = onCancel,
         closeIsCancel = true,
     ) {
-        if (showGoogle && state.googleClientId != null) {
+        val google = showGoogle && state.googleClientId != null
+        if (google || state.appleWeb) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.lg, vertical = Tokens.Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs),
             ) {
-                GoogleSignInButton(onClick = onGoogle, enabled = !state.working)
+                if (state.appleWeb) AppleSignInButton(onClick = onApple, enabled = !state.working && !state.appleWorking)
+                if (google) GoogleSignInButton(onClick = onGoogle, enabled = !state.working && !state.appleWorking)
                 Text(
                     stringResource(if (signUp) R.string.or_create_with_email else R.string.or_sign_in_with_email),
                     style = MaterialTheme.typography.bodySmall,

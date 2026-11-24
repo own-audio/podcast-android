@@ -34,6 +34,7 @@ server doesn't support isn't there. [Servers and sync](servers.md) has the detai
 
 The app is not yet on Google Play. An F-Droid build is coming too. Both builds are the same
 app; the F-Droid one has no Google code, so it has no **Continue with Google**.
+**Continue with Apple** is in both.
 
 ## What's in this guide
 

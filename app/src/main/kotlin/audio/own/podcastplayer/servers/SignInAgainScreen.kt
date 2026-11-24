@@ -13,7 +13,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import audio.own.core.designsystem.components.AppleSignInButton
 import audio.own.core.designsystem.components.GoogleSignInButton
+import audio.own.podcastplayer.apple.AppleSignIn
+import audio.own.podcastplayer.apple.followApple
 import audio.own.podcastplayer.ui.Section
 import audio.own.core.designsystem.theme.LocalPalette
 import audio.own.core.designsystem.theme.Tokens
@@ -42,9 +45,11 @@ data class SignInAgainState(
     val working: Boolean = false,
     val error: UiText? = null,
     val googleClientId: String? = null,
+    val appleWeb: Boolean = false,
+    val appleWorking: Boolean = false,
     val done: Boolean = false,
 ) {
-    val canSubmit: Boolean get() = username.isNotBlank() && password.isNotEmpty() && !working
+    val canSubmit: Boolean get() = username.isNotBlank() && password.isNotEmpty() && !working && !appleWorking
 }
 
 /** The saved server's sign-in, entered again: its username kept, the password asked for. */
@@ -53,6 +58,7 @@ class SignInAgainViewModel(
     private val servers: ServersModel,
     private val log: AppLog,
     googleAvailable: Boolean,
+    private val apple: AppleSignIn? = null,
 ) : ViewModel() {
     private val record = servers.state.value.server(serverId)
     private val _state = MutableStateFlow(
@@ -66,8 +72,19 @@ class SignInAgainViewModel(
 
     init {
         viewModelScope.launch { servers.signedIn.collect { if (it == serverId) _state.update { s -> s.copy(done = true) } } }
-        if (googleAvailable && record?.kind == ServerKinds.OWN_AUDIO) {
-            viewModelScope.launch { _state.update { it.copy(googleClientId = servers.googleClientIdFor(serverId)) } }
+        if ((googleAvailable || apple != null) && record?.kind == ServerKinds.OWN_AUDIO) {
+            viewModelScope.launch {
+                val options = servers.signInOptionsFor(serverId)
+                _state.update { it.copy(googleClientId = options.googleClientId.takeIf { googleAvailable }, appleWeb = apple != null && options.appleWeb) }
+            }
+        }
+        apple?.let {
+            viewModelScope.followApple(
+                it, AppleSignIn.originServer(serverId),
+                onBusy = { busy -> _state.update { s -> s.copy(appleWorking = busy) } },
+                onError = { text -> _state.update { s -> s.copy(error = text) } },
+                onDone = { _state.update { s -> s.copy(done = true) } },
+            )
         }
     }
 
@@ -82,6 +99,15 @@ class SignInAgainViewModel(
     }
 
     fun signInWithGoogle(idToken: String) = run { servers.signInAgainWithGoogle(serverId, idToken) }
+
+    /** Signs in to this saved server again with Apple, in the browser; it keeps its id, downloads and addresses. */
+    fun signInWithApple() {
+        val apple = apple ?: return
+        val saved = servers.state.value.server(serverId) ?: return
+        if (_state.value.working || _state.value.appleWorking) return
+        _state.update { it.copy(error = null) }
+        apple.begin(saved.host, saved.displayName, serverId, AppleSignIn.originServer(serverId))
+    }
 
     fun googleFailed(reason: String) {
         log.error("google", "sign-in with Google unavailable: $reason")
@@ -114,6 +140,7 @@ fun SignInAgainContent(
     onPassword: (String) -> Unit,
     onSubmit: () -> Unit,
     onGoogle: () -> Unit,
+    onApple: () -> Unit = {},
 ) {
     Page(
         title = state.title,
@@ -121,13 +148,20 @@ fun SignInAgainContent(
         closeIsCancel = true,
         actions = { BarAction(stringResource(R.string.sign_in), enabled = state.canSubmit, working = state.working, onClick = onSubmit) },
     ) {
-        if (showGoogle && state.googleClientId != null) {
+        val google = showGoogle && state.googleClientId != null
+        if (google || state.appleWeb) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.lg, vertical = Tokens.Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs),
             ) {
-                GoogleSignInButton(onClick = onGoogle, enabled = !state.working)
-                Text(stringResource(R.string.sign_in_again_google_footer), style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
+                if (state.appleWeb) AppleSignInButton(onClick = onApple, enabled = !state.working && !state.appleWorking)
+                if (google) GoogleSignInButton(onClick = onGoogle, enabled = !state.working && !state.appleWorking)
+                val footer = when {
+                    google && state.appleWeb -> R.string.sign_in_again_apple_google_footer
+                    google -> R.string.sign_in_again_google_footer
+                    else -> R.string.sign_in_again_apple_footer
+                }
+                Text(stringResource(footer), style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
             }
         }
         Section(header = null) {

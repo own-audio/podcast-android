@@ -28,7 +28,7 @@ To add one, see [Getting started](getting-started.md#add-a-server).
 | Family, devices, listening time | | Yes, see [own.audio extras](own-audio.md) | | |
 | Catalog for Discover | | Where the server has one | | |
 | Episode summaries and questions | | Where the server offers them | | |
-| Sign in with Google (Google Play build) | | Where the server accepts it | | |
+| Sign in with Apple, and Google (Google Play build) | | Where the server accepts it | | |
 
 Notes:
 
@@ -62,8 +62,8 @@ sign-in, or no address answers.
 "Signed in as" your user name or email.
 
 - **Sign In Again**: enter the password again, for example after you changed it, or when the
-  page says **The server no longer accepts this sign-in.** If you signed up with Google, sign
-  in the same way.
+  page says **The server no longer accepts this sign-in.** If you signed up with Apple or
+  Google, sign in the same way.
 - **Delete Account…** (own.audio): see
   [own.audio extras](own-audio.md#deleting-your-account).
 

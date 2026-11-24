@@ -72,7 +72,10 @@ fun DesignCatalogue(modifier: Modifier = Modifier) {
             DownloadButton(DownloadState.Downloaded, {}, {})
             SetDownloadButton(3, 10, downloading = true, onDownload = {}, onRemove = {})
         }
-        Column(Modifier.padding(horizontal = Tokens.Spacing.lg)) { GoogleSignInButton(onClick = {}) }
+        Column(Modifier.padding(horizontal = Tokens.Spacing.lg), verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.sm)) {
+            AppleSignInButton(onClick = {})
+            GoogleSignInButton(onClick = {})
+        }
         SettingsSection(header = "Section", footer = "A footer explains the rows above.") {
             ValueRow("Value row", "Value", onClick = {})
             SwitchRow("Switch row", checked = true, onCheckedChange = {})

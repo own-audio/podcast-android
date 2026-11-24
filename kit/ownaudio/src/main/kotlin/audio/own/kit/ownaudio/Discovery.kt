@@ -1,6 +1,7 @@
 package audio.own.kit.ownaudio
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -37,6 +38,8 @@ data class Discovery(
         val totp: Boolean = false,
         val passwordReset: Boolean = false,
         val emailVerification: Boolean = false,
+        /** Sign in with Apple through the browser: `true`, or an object of its settings. Read [supportsAppleWeb]. */
+        val appleWeb: JsonElement? = null,
     )
 
     @Serializable
@@ -82,6 +85,19 @@ data class Discovery(
         is JsonObject -> true
         else -> false
     }
+
+    /**
+     * Whether the server runs Sign in with Apple in the browser ([appleStartUrl]), which is how
+     * Android signs in with Apple. Said either as `auth.apple_web` or as the grant in
+     * `auth.grants`; anything else, or nothing, is no.
+     */
+    val supportsAppleWeb: Boolean
+        get() = when (val flag = auth.appleWeb) {
+            is JsonPrimitive -> flag.booleanOrNull == true
+            // An object of settings counts as on unless it says `"enabled": false`.
+            is JsonObject -> (flag["enabled"] as? JsonPrimitive)?.booleanOrNull != false
+            else -> false
+        } || Grants.APPLE_CODE in auth.grants
 
     /** The yes/no modules, for a quick look; objects left out. */
     val flags: Map<String, Boolean>

@@ -725,12 +725,29 @@ emails you a link to confirm the address."; two-factor step when asked. Register
   installed Play build, don't copy it from a console page) needs its own Android OAuth client. This is
   maintainer setup, listed in `docs/release.md`, never committed.
 
-### 10.4 Apple sign-in
+### 10.4 Apple sign-in (both flavours)
 
-**Not in 1.0 on Android.** Android has no native Sign in with Apple, and the server has no callback for
-Apple's web flow yet. People with an Apple-only own.audio account set a password with "Forgot
-password" on the web console, then sign in with it. If the server gains an Apple web callback later,
-add an `AppleSignInButton` that opens a Custom Tab and receives the id token by App Link.
+Android has no Sign in with Apple of its own, so the server runs Apple's web flow and the app only
+opens a browser. No Apple or Google SDK: it is in the `foss` build too.
+
+- Shown where discovery says so: `Discovery.supportsAppleWeb` reads `auth.apple_web` (`true`, or an
+  object without `"enabled": false`) or `Grants.APPLE_CODE` in `auth.grants`. Same screens as Google
+  (§10.2, the server form, Sign In Again), Apple first; `AppleSignInButton` is black on a light
+  screen and white on a dark one, "Continue with Apple".
+- `AppleSignIn` (app-wide, one at a time): a PKCE pair (`Pkce`, S256) and a random `state`, saved to
+  `noBackupFilesDir/apple-sign-in.json` with the server, the name and the screen that started it, so
+  it survives the process ending while the browser is open (dropped after 30 minutes). Then a Custom
+  Tab at `/api/v2/auth/apple/start?redirect_uri=<applicationId>:/apple&code_challenge=…&code_challenge_method=S256&state=…`.
+- The server redirects to `<applicationId>:/apple?code=…&state=…` (or `error=access_denied|server_error`).
+  `AppleRedirectActivity` (exported, no UI) accepts exactly that scheme and path — a filter can't
+  name a path without a host, so the filter has the scheme and the activity checks the path — hands over `code`, `error` and
+  `state` only, and brings `MainActivity` back with `CLEAR_TOP | SINGLE_TOP`.
+- `state` must match (else "That answer from Apple isn't for this sign-in."); then `POST /auth/token`
+  with `grant_type=Grants.APPLE_CODE`, `code`, `code_verifier`, `device_name`, `device_kind`, handled
+  like the Google grant (two-factor, `identity_conflict`, `registration_closed`). `invalid_grant`:
+  "That Apple sign-in has expired. Try again." Coming back to the app without a redirect, or
+  `access_denied`, is a cancel and says nothing. No browser: "Sign in with Apple opens a web browser,
+  and this device has none."
 
 ### 10.5 Two-factor
 

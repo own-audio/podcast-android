@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import audio.own.core.designsystem.components.AppleSignInButton
 import audio.own.core.designsystem.components.GoogleSignInButton
 import audio.own.core.designsystem.components.ValueRow
 import audio.own.core.designsystem.theme.LocalPalette
@@ -45,6 +46,7 @@ fun AddServerContent(
     onPassword: (String) -> Unit,
     onConnect: () -> Unit,
     onGoogle: () -> Unit,
+    onApple: () -> Unit = {},
 ) {
     Page(
         title = stringResource(R.string.add_a_server),
@@ -79,13 +81,16 @@ fun AddServerContent(
             )
         }
         state.error?.let { ErrorLine(it.text(), Modifier.padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm)) }
-        if (showGoogle && state.mayOfferGoogle && state.googleClientId != null) {
+        val google = showGoogle && state.mayOfferGoogle && state.googleClientId != null
+        val apple = state.mayOfferGoogle && state.appleWeb
+        if (google || apple) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = Tokens.Spacing.xl, vertical = Tokens.Spacing.sm),
                 verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs),
             ) {
-                GoogleSignInButton(onClick = onGoogle, enabled = !state.busy)
-                Text(stringResource(R.string.google_on_this_server), style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
+                if (apple) AppleSignInButton(onClick = onApple, enabled = !state.busy)
+                if (google) GoogleSignInButton(onClick = onGoogle, enabled = !state.busy)
+                Text(stringResource(providersNote(google, apple)), style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
             }
         }
     }
@@ -115,4 +120,11 @@ private fun KindRow(kind: String?, onKind: (String?) -> Unit) {
             }
         }
     }
+}
+
+/** The note under the Apple and Google buttons, naming the ones shown. */
+fun providersNote(google: Boolean, apple: Boolean): Int = when {
+    google && apple -> R.string.apple_or_google_on_this_server
+    apple -> R.string.apple_on_this_server
+    else -> R.string.google_on_this_server
 }

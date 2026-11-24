@@ -36,6 +36,16 @@ can hold your server's addresses, so look it over before you post it publicly.
 - **podfetch refuses the account for syncing.** The admin account can't sync there: add a
   separate user on podfetch and sign in with it.
 
+## Sign in with Apple
+
+- No **Continue with Apple** button: the own.audio server doesn't offer Sign in with Apple in the
+  browser. Use your email and password, or set a password with "Forgot password" on the server's
+  web page.
+- **"Sign in with Apple opens a web browser, and this device has none."** Install or turn on a
+  browser (Chrome, Firefox or another), then try again.
+- **"That Apple sign-in has expired."** The sign-in took too long or was used already. Tap
+  **Continue with Apple** again.
+
 ## An episode won't play
 
 - **"This episode is not on this device. Download it, or turn Offline Mode off."** Offline Mode
