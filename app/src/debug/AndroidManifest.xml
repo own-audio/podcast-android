@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Debug builds only: every token and shared component on one screen. -->
+    <!-- Debug builds only: every token and shared component on one screen. No launcher icon, so
+         a phone used for development shows one icon per app; open it with
+         adb shell am start -n <application id>/<package>.DesignCatalogueActivity -->
     <application>
         <activity
             android:name=".DesignCatalogueActivity"
             android:exported="true"
-            android:label="@string/design_catalogue">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="@string/design_catalogue" />
     </application>
 </manifest>
