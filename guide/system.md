@@ -1,10 +1,10 @@
 ---
-title: Android Auto, the widget and the notification
+title: Android Auto, the widgets and the notification
 nav_order: 13
-description: "own.audio Podcasts outside the app: the media notification, Android Auto, the Up Next widget, the Continue Listening shortcut, voice and background refresh."
+description: "own.audio Podcasts outside the app: the media notification, Android Auto, the Player, Now Playing and Up Next widgets, the Continue Listening shortcut, voice and background refresh."
 ---
 
-# Android Auto, the widget and the notification
+# Android Auto, the widgets and the notification
 {: .no_toc }
 
 1. TOC
@@ -35,14 +35,25 @@ The player in the car has the skip buttons and a **Speed** button that steps thr
 1.5×, 1.75×, 2× and 0.75×. You can also search by voice for a show. With nothing followed yet,
 the car says **Follow a show on your phone**.
 
-## The widget
+## The widgets
 
-Add the **Up Next** widget the usual way: touch and hold the home screen, tap **Widgets**, and
-find own.podcast. It comes in a small and a wider size.
+own.podcast has three home-screen widgets. They take the colors of your wallpaper (Android 12
+and later), with the play button and the progress in the app's color, and follow light and dark
+mode.
 
-It shows the episode you are in, then episodes you have started, then the newest in New
-Episodes: one on the small widget, up to three on the wider one. Tap an episode to play it.
-With nothing to show, it says **Nothing new yet**.
+- **Player** (4×1): the picture, the episode and the show, with skip back, **Play**/**Pause** and
+  skip forward, by the intervals you chose in Settings. Tap the episode to open the player. On a
+  narrow strip only **Play**/**Pause** stays; stretched taller, it becomes the large player.
+- **Now Playing** (4×2): a large picture, the episode, the show, the time left, how far you are,
+  and the same buttons. When nothing is in the player, it shows the episode you are in
+  (**Continue**) or the next new one (**Up Next**); **Play** goes on with the last episode.
+- **Up Next** (4×2): the episode you are in, then episodes you have started, then the newest in
+  New Episodes, as pictures with the time left on each, as many as fit the widget's size. Tap one
+  to play it. With nothing to show, it says **Nothing new yet**.
+
+The buttons work without opening the app. While an episode plays, the progress moves on about
+once a minute. Add a widget the usual way: touch and hold the home screen, tap **Widgets**, and
+find own.podcast. An Up Next widget you added before this version becomes the new one.
 
 ## The shortcut
 
@@ -58,7 +69,7 @@ what you were listening to.
 ## In the background
 
 About once an hour, when Android allows it, the app checks feeds and servers for new episodes,
-so New Episodes and the widget are current when you look, and a show's download rules can fetch
+so New Episodes and the widgets are current when you look, and a show's download rules can fetch
 the newest episodes. Android decides when this runs; battery saving can delay it. While the app
 is open it checks again every 15 minutes.
 

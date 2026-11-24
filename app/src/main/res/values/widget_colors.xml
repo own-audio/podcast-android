@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget previews' colours below Android 12; from 12 the wallpaper's (values-v31). -->
+<resources>
+    <color name="widget_surface">#FFF7F7F8</color>
+    <color name="widget_on_surface">#FF1D1D1F</color>
+    <color name="widget_on_surface_variant">#FF5F5F66</color>
+    <color name="widget_track">#FFE6E6EA</color>
+    <color name="widget_accent">#FF0A6E9C</color>
+    <color name="widget_on_accent">#FFFFFFFF</color>
+</resources>

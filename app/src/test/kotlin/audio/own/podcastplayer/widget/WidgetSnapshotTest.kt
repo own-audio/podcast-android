@@ -37,13 +37,13 @@ class WidgetSnapshotTest {
         SourcedEpisode(SourceRef.Phone, Episode(id = id, showId = "s1", title = "Episode $id", durationMs = 3_600_000, imageUrl = image))
 
     @Test
-    fun `the episode playing, then the ones under way, then the newest, three at most`() {
+    fun `the episode playing, then the ones under way, then the newest`() {
         val inbox = listOf(episode("n1"), episode("n2"), episode("started"), episode("n3"))
         val progress = mapOf(inbox[2].id to ListeningProgress(900_000, false))
         val playing = episode("playing", image = "https://img.example/ep.jpg")
         val player = PodcastPlayer.State(item = playing, show = show, positionMs = 1_800_000, durationMs = 3_600_000)
         val picked = WidgetSnapshot.pick(player, inbox, progress) { show }
-        assertEquals(listOf("playing", "started", "n1"), picked.map { it.entry.id.substringAfterLast('|') })
+        assertEquals(listOf("playing", "started", "n1", "n2", "n3"), picked.map { it.entry.id.substringAfterLast('|') })
         val first = picked[0].entry
         assertEquals(0.5, first.fraction, 0.0)
         assertEquals(30 * 60_000L, first.remainingMs)
@@ -53,6 +53,8 @@ class WidgetSnapshotTest {
         assertEquals(0.25, picked[1].entry.fraction, 0.0)
         assertEquals(0.0, picked[2].entry.fraction, 0.0)
         assertTrue(WidgetSnapshot.pick(PodcastPlayer.State(), emptyList(), emptyMap()) { null }.isEmpty())
+        val many = (1..20).map { episode("m$it") }
+        assertEquals(WidgetSnapshot.MAX_ENTRIES, WidgetSnapshot.pick(PodcastPlayer.State(), many, emptyMap()) { show }.size)
     }
 
     @Test

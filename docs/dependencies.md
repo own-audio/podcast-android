@@ -16,10 +16,11 @@ Every library the app uses, and why. A new one needs a line here in the same cha
 | DataStore | Settings |
 | WorkManager | Downloads, uploads, refresh in the background |
 | Coil 3 | Covers, with cache keys that survive expiring signed links |
-| Glance | The home-screen widget |
+| Glance (`glance-appwidget`, `glance-material3`) | The home-screen widgets; `glance-material3` gives them the fallback colour scheme below Android 12 |
 | Credential Manager + Google ID (play flavour only) | Sign in with Google |
 | AndroidX Browser (Custom Tabs) | Sign in with Apple, which runs in the browser: Android has no Apple sign-in of its own |
 | ZXing core (encoder only) | Family invitation QR codes |
 | Tests: Media3 test utils (`media3-test-utils`, `-robolectric`) | Real ExoPlayer instances on a fake clock in JVM tests |
+| Tests: Glance testing (`glance-appwidget-testing`) | The widgets' layouts and click actions in JVM tests |
 | Tests: WorkManager testing (`work-testing`) | Running download and refresh workers in JVM tests |
 | Tests: JUnit 4, coroutines-test, Turbine, MockWebServer, Robolectric, Compose ui-test, Roborazzi | Unit, JVM UI and screenshot tests |

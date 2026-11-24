@@ -25,7 +25,7 @@ An episode leaves New Episodes when you finish it, mark it played, or dismiss it
 
 Pull the list down to check every feed and server for new episodes. The app also checks by
 itself when it opens, and about every hour in the background (see
-[Android Auto, the widget and the notification](system.md#in-the-background)).
+[Android Auto, the widgets and the notification](system.md#in-the-background)).
 
 If you don't want a show's new episodes here, turn off **Show in New Episodes** in its
 [Show Settings](shows.md#show-settings).

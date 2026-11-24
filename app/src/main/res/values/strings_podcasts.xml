@@ -228,7 +228,22 @@
     <string name="auto_no_shows">No shows yet</string>
     <string name="no_chapters">No chapters</string>
     <string name="auto_speed">Speed %s</string>
-    <string name="widget_description">The episode you are in and the newest ones, a tap away.</string>
+    <string name="widget_description">The episode you are in and the newest ones as pictures with the time left; tap one to play it.</string>
+    <string name="widget_continue_percent">Continue · %1$d%%</string>
+    <string name="widget_player_name">Player</string>
+    <string name="widget_player_description">The episode playing, with skip back, play or pause, and skip forward.</string>
+    <string name="widget_now_playing_name">Now Playing</string>
+    <string name="widget_now_playing_description">A large picture, the progress and the controls; the episode up next when nothing plays.</string>
+    <string name="widget_sample_title" translatable="false">Why we still love radio</string>
+    <string name="widget_sample_subtitle" translatable="false">The Quiet Hour</string>
+    <string name="widget_sample_length_1" translatable="false">30 min</string>
+    <string name="widget_sample_length_2" translatable="false">38 min</string>
+    <string name="widget_sample_length_3" translatable="false">61 min</string>
+    <string name="widget_sample_length_4" translatable="false">24 min</string>
+    <string name="widget_sample_length_5" translatable="false">45 min</string>
+    <string name="widget_sample_length_6" translatable="false">33 min</string>
+    <string name="widget_sample_length_7" translatable="false">58 min</string>
+    <string name="widget_sample_length_8" translatable="false">41 min</string>
     <string name="widget_nothing_new">Nothing new yet</string>
     <string name="continue_listening">Continue Listening</string>
     <string name="voice_show_not_found">You don\'t follow that show any more.</string>

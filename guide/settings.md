@@ -54,7 +54,7 @@ A show can also keep its own downloads; see [Show Settings](shows.md#show-settin
 
 The color of buttons, links and what's playing: **App Color** (the app's blue, the default),
 Blue, Indigo, Purple, Pink, Red, Orange, Yellow, Green, Teal, Brown or Graphite. The icon and
-the widget keep the app's color.
+the widgets keep the app's color.
 
 ## Language
 

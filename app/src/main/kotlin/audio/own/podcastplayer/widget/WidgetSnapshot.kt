@@ -13,8 +13,8 @@ import kotlin.math.roundToLong
 import kotlinx.serialization.Serializable
 
 /**
- * What the Up Next widget shows: the app writes it to `filesDir/widget/` whenever its entries
- * change, the widget only reads. Pictures sit next to it as small JPEGs, so the widget needs
+ * What the widgets show besides the episode playing: Up Next. The app writes it to
+ * `filesDir/widget/` whenever its entries change, the widgets only read. Pictures sit next to it as small JPEGs, so the widget needs
  * neither the network nor a sign-in. Ported from the iOS app's `WidgetSnapshot`.
  */
 @Serializable
@@ -38,7 +38,8 @@ data class WidgetSnapshot(val entries: List<Entry>, val atEpochMs: Long = 0) {
 
     companion object {
         const val SCHEME = "ownpodcast"
-        const val MAX_ENTRIES = 3
+        /** The shelf's pictures at most: three rows of four on a large widget. */
+        const val MAX_ENTRIES = 12
 
         /** The link a tap opens; the id carries a `/`, a `|` and maybe a `#`, so it is escaped whole. */
         fun playLink(id: String): Uri = "$SCHEME://play/${Uri.encode(id)}".toUri()
@@ -52,7 +53,7 @@ data class WidgetSnapshot(val entries: List<Entry>, val atEpochMs: Long = 0) {
 
         /**
          * The episode in the player, then the ones under way in New Episodes, then the newest
-         * new ones; three at most. Fractions to the percent and time left to the minute, so a
+         * new ones; [MAX_ENTRIES] at most. Fractions to the percent and time left to the minute, so a
          * playing episode rewrites the file about once a minute, not with every tick.
          */
         fun pick(
@@ -88,8 +89,9 @@ data class WidgetSnapshot(val entries: List<Entry>, val atEpochMs: Long = 0) {
             }
         }
 
+        /** The `@2` names the larger pictures of the redesigned widgets, so the small old ones are made again. */
         fun coverName(url: String): String =
-            MessageDigest.getInstance("SHA-1").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }.take(20) + ".jpg"
+            MessageDigest.getInstance("SHA-1").digest("$url@2".toByteArray()).joinToString("") { "%02x".format(it) }.take(20) + ".jpg"
     }
 }
 

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A made-up cover for the widget picker's previews. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path android:pathData="M0,0h96v96h-96z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="96"
+                android:endY="96"
+                android:startColor="#FF3A7BD6"
+                android:endColor="#FF1F3A7A" />
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#55FFFFFF"
+        android:pathData="M26,42h6v12h-6z M36,34h6v28h-6z M46,26h6v44h-6z M56,36h6v24h-6z M66,44h6v8h-6z" />
+</vector>

@@ -233,7 +233,12 @@
     <string name="auto_no_shows">Zatím žádné pořady</string>
     <string name="no_chapters">Žádné kapitoly</string>
     <string name="auto_speed">Rychlost %s</string>
-    <string name="widget_description">Rozposlouchaná epizoda a ty nejnovější na jedno klepnutí.</string>
+    <string name="widget_description">Rozposlouchaná epizoda a ty nejnovější jako obrázky se zbývajícím časem; klepnutím jednu pustíte.</string>
+    <string name="widget_continue_percent">Pokračovat · %1$d %%</string>
+    <string name="widget_player_name">Přehrávač</string>
+    <string name="widget_player_description">Epizoda, která hraje, s přeskočením zpět, přehráním nebo pozastavením a přeskočením vpřed.</string>
+    <string name="widget_now_playing_name">Právě hraje</string>
+    <string name="widget_now_playing_description">Velký obrázek, průběh a ovládání; když nic nehraje, epizoda, která je na řadě.</string>
     <string name="widget_nothing_new">Zatím nic nového</string>
     <string name="continue_listening">Pokračovat v poslechu</string>
     <string name="voice_show_not_found">Tento pořad už neodebíráte.</string>

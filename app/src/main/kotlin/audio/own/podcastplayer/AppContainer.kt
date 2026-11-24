@@ -53,7 +53,7 @@ import audio.own.podcast.library.room.RoomFeedLibraryStore
 import audio.own.podcast.library.room.RoomValueStore
 import audio.own.podcastplayer.playback.Artwork
 import audio.own.podcastplayer.playback.CarArtwork
-import audio.own.podcastplayer.widget.UpNextWidget
+import audio.own.podcastplayer.widget.WidgetData
 import audio.own.podcastplayer.widget.WidgetStore
 import audio.own.podcastplayer.widget.WidgetUpdater
 import audio.own.core.sync.RefreshWorkerFactory
@@ -244,7 +244,7 @@ class AppContainer(context: Context) {
     val widget by lazy {
         WidgetUpdater(
             context = app,
-            store = WidgetStore(UpNextWidget.folder(app)),
+            store = WidgetStore(WidgetData.folder(app)),
             library = podcasts.state,
             player = player.state,
             jpeg = { url -> artwork.smallJpeg(url, WIDGET_COVER_PX) },
@@ -328,8 +328,8 @@ class AppContainer(context: Context) {
     private fun appLocale(): Locale = AppCompatDelegate.getApplicationLocales()[0] ?: Locale.getDefault()
 
     private companion object {
-        /** The small widget's 56 dp cover at about 2×. */
-        const val WIDGET_COVER_PX = 112
+        /** The widgets' pictures: the big player's is about 150 dp across. */
+        const val WIDGET_COVER_PX = 320
     }
 }
 

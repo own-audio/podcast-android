@@ -99,6 +99,7 @@ private fun AppNavHost(container: AppContainer, nav: NavHostController) {
     val back: () -> Unit = { nav.popBackStack() }
     fun arg(entry: androidx.navigation.NavBackStackEntry) = entry.arguments?.getString("id").orEmpty()
 
+    OpenPlayerFromWidget(container) { nav.navigate(PodcastRoutes.PLAYER) { launchSingleTop = true } }
     NavHost(nav, startDestination = Routes.MAIN) {
         composable(Routes.MAIN) {
             val podcasts by container.podcasts.state.collectAsStateWithLifecycle()
@@ -359,5 +360,23 @@ private fun AppleBrowser(apple: AppleSignIn) {
         } catch (e: ActivityNotFoundException) {
             apple.noBrowser()
         }
+    }
+}
+
+/** A tap on a widget's words opens the player, when an episode is loaded. */
+@Composable
+private fun OpenPlayerFromWidget(container: AppContainer, open: () -> Unit) {
+    val context = LocalContext.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val activity = context.findActivity() as? androidx.activity.ComponentActivity
+        fun handle(intent: android.content.Intent?) {
+            if (intent?.getBooleanExtra(audio.own.podcastplayer.MainActivity.EXTRA_OPEN_PLAYER, false) != true) return
+            intent.removeExtra(audio.own.podcastplayer.MainActivity.EXTRA_OPEN_PLAYER)
+            if (container.player.state.value.item != null) open()
+        }
+        handle(activity?.intent)
+        val listener = androidx.core.util.Consumer<android.content.Intent> { handle(it) }
+        activity?.addOnNewIntentListener(listener)
+        onDispose { activity?.removeOnNewIntentListener(listener) }
     }
 }

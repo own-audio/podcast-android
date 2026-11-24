@@ -116,6 +116,9 @@ class PodcastPlayer(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     private var held: Held? = null
+
+    /** The last episode is back paused after a relaunch, not opened yet: the first Play loads it. */
+    val isHeld: Boolean get() = held != null
     private var item: SourcedEpisode? = null
     private var show: Show? = null
     private var skip = SkipIntervals(DEFAULT_SKIP_BACK, DEFAULT_SKIP_FORWARD)

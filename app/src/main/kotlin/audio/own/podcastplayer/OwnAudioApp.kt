@@ -57,6 +57,7 @@ class OwnAudioApp : Application(), Configuration.Provider, AppleRedirects {
             container.downloads.start()
         }
         container.widget.start(container.scope)
+        container.scope.launch { audio.own.podcastplayer.widget.WidgetPreviews.publish(this@OwnAudioApp, container.versionCode) }
         // At most hourly, connected and not on a low battery; scheduling again keeps the plan.
         runCatching { PeriodicRefresh.schedule(WorkManager.getInstance(this)) }
             .onFailure { container.log.error("app", "the background refresh wasn't scheduled: ${it.javaClass.simpleName}") }

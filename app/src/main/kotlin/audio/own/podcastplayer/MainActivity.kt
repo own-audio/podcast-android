@@ -118,9 +118,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private companion object {
-        val FEED_SCHEMES = setOf("feed", "podcast", "pcast")
-        const val TABLET_MIN_WIDTH_DP = 600
-        const val ACTION_CONTINUE = "audio.own.podcastplayer.CONTINUE_LISTENING"
+    companion object {
+        /** The widgets open the player with this. */
+        const val EXTRA_OPEN_PLAYER = "openPlayer"
+        private val FEED_SCHEMES = setOf("feed", "podcast", "pcast")
+        private const val TABLET_MIN_WIDTH_DP = 600
+        private const val ACTION_CONTINUE = "audio.own.podcastplayer.CONTINUE_LISTENING"
     }
 }

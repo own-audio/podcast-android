@@ -50,7 +50,7 @@ app; the F-Droid one has no Google code, so it has no **Continue with Google**.
 - [Servers and sync](servers.md): what each kind of server adds, and the server page.
 - [own.audio extras](own-audio.md): the family, devices, listening time, summaries.
 - [Settings](settings.md): every setting and its default.
-- [Android Auto, the widget and the notification](system.md)
+- [Android Auto, the widgets and the notification](system.md)
 - [Privacy](privacy.md)
 - [Troubleshooting](troubleshooting.md)
 
