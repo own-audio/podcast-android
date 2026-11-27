@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -80,6 +85,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -90,6 +96,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.TextAutoSize
 import audio.own.core.designsystem.components.MiniPlayerBar
 import audio.own.core.designsystem.theme.AppBrand
 import audio.own.core.designsystem.theme.LocalPalette
@@ -388,7 +395,16 @@ private fun androidx.compose.foundation.layout.RowScope.Tool(caption: String, la
             verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs),
         ) {
             Box(Modifier.heightIn(min = 24.dp), contentAlignment = Alignment.Center) { icon() }
-            Text(caption, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Shrinks to fit its share of the row rather than end in "…" in Czech or with larger text.
+            val style = MaterialTheme.typography.labelSmall
+            Text(
+                caption,
+                style = style,
+                color = color,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 7.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.testTag("player.tool.label"),
+            )
         }
     }
 }
@@ -613,7 +629,9 @@ fun MiniPlayer(player: PodcastPlayer.State, onOpen: () -> Unit, onToggle: () -> 
         secondaryLabel = stringResource(R.string.skip_forward_seconds, player.skip.forwardSecs),
         onSecondary = onSkipForward,
         onOpen = onOpen,
-        modifier = modifier.padding(bottom = Tokens.Spacing.xs),
+        // Clears the navigation bar wherever nothing else does: with the tabs as a rail, and on the
+        // pages over the tabs. The bottom bar on phones has taken the inset already.
+        modifier = modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)).padding(bottom = Tokens.Spacing.xs),
         progressAtTop = false,
     )
 }
