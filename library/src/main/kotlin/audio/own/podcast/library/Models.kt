@@ -36,6 +36,8 @@ data class Show(
     val settings: ShowSettings = ShowSettings(),
     /** The part of the source it lives in, where a source has parts: an Audiobookshelf library. */
     val collection: String? = null,
+    /** The feed's `podcast:guid`: the same show under another address (a moved or personal feed). */
+    val podcastGuid: String? = null,
 )
 
 /**

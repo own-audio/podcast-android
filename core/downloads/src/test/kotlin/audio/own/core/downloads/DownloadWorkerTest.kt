@@ -165,6 +165,17 @@ class DownloadWorkerTest {
     }
 
     @Test
+    fun `audio after junk bytes is kept when the server says audio`() = runBlocking {
+        // An Audiobookshelf book's MP3s had 384 bytes before the first frame.
+        val body = ByteArray(384) { 0x20 } + mp3Bytes()
+        answer = { audio(body, type = "audio/mpeg") }
+        downloads.download(listOf(request("t1")))
+        assertEquals(ListenableWorker.Result.success(), worker("srv|t1").doWork())
+        assertTrue(downloads.file("srv|t1")!!.name.endsWith(".mp3"))
+        assertArrayEquals(body, downloads.file("srv|t1")!!.readBytes())
+    }
+
+    @Test
     fun `JSON sent as octet-stream is caught by its bytes`() = runBlocking {
         answer = { audio(("{\"error\":1}" + " ".repeat(2000)).toByteArray(), type = "application/octet-stream") }
         downloads.download(listOf(request("t1")))

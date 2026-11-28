@@ -333,9 +333,11 @@ class PodcastScreenshotTest {
     @Test @Config(fontScale = 2f) fun summaryLargestText() = shoot("episode_summary_font200", false) { Summary() }
     @Test @Config(fontScale = 2f) fun discoverSearchLargestText() = shoot("discover_search_font200", false) { DiscoverSearch() }
 
-    // A tablet in landscape: the tabs as a rail, lists a readable width, the player in a column.
+    // A tablet in landscape: the tabs as a rail, lists a readable width, the player in two panes.
     @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletNewEpisodes() = shoot("tablet_new_episodes", false) { TabsScreen { NewEpisodes() } }
     @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletShows() = shoot("tablet_shows", true) { TabsScreen { Shows() } }
     @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletPlayer() = shoot("tablet_player", false) { Player() }
+    @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tabletPlayerDark() = shoot("tablet_player_dark", true) { Player() }
+    @Test @Config(qualifiers = "w800dp-h1280dp-port-mdpi") fun tabletPlayerPortrait() = shoot("tablet_player_portrait", false) { Player() }
     @Test @Config(qualifiers = "w673dp-h841dp-mdpi") fun foldableShow() = shoot("foldable_show", false) { TabsScreen { ShowPage() } }
 }

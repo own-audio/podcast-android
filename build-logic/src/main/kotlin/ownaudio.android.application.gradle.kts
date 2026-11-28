@@ -44,6 +44,9 @@ android {
             // R8 on for release, so the build testers install is the one that ships.
             optimization { enable = true }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // The libraries' native code ships stripped; the symbol table in the bundle lets
+            // Play symbolicate native crashes (and answers its "no debug symbols" warning).
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
         }
     }
 }

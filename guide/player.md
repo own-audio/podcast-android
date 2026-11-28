@@ -30,15 +30,19 @@ From the top:
 - The **×** button (**Stop**) stops the episode and clears it from the mini player, the
   notification and the widget.
 - The picture, the episode's title and the show. While a sleep timer runs, the time left is on
-  the picture.
+  the picture; it counts down while the episode is paused too.
 - The current chapter's name, if the episode has chapters. Tap it for the chapter list.
 - The position bar: drag to move in the episode. Under it, the time played and the time left at
-  the current speed.
+  the current speed, or **Played** at the very end.
 - Skip back, play/pause, skip forward. The skip buttons show their seconds; you set them in
   [Settings](settings.md#playback) (15 s back and 30 s forward by default).
 - The tools: **Speed**, **Sleep**, **Chapters** (only with chapters), **Up Next** and
   **Output**. A tool is colored while it is in use (a speed other than 1×, a sleep timer
   running, episodes in Up Next).
+
+On a tablet held sideways (a window at least 840 dp wide and wider than tall), the picture, title
+and chapter are on the left and the position bar, the buttons and the tools on the right, so
+nothing needs scrolling.
 
 While streaming, a line under the position bar may say how many minutes are already saved
 ahead on the phone, for example **12 min saved**, so you know how long it plays on without a

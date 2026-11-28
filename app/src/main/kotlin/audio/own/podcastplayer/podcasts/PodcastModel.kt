@@ -570,6 +570,7 @@ class PodcastModel(
      * own feeds: they are on the device, and a server would only time out.
      */
     suspend fun reloadLists() {
+        val generation = reloadsStarted.incrementAndGet()
         val refs = buildList {
             add(SourceRef.Phone)
             if (!isOffline) (ownAudio.value.keys + shelves.keys).forEach { add(SourceRef.Server(java.util.UUID.fromString(it))) }
@@ -604,8 +605,20 @@ class PodcastModel(
             if (listed == null || value.updatedAt.isAfter(listed.updatedAt)) progress[id] = value
         }
         val failing = answers.filterValues { it == null }.keys.map { it.id }.toSet()
-        _state.update { it.copy(shows = shows, inbox = inbox, progress = progress, unreachable = failing, upNext = upNext.all()) }
+        val queued = upNext.all()
+        synchronized(reloadsLock) {
+            // Reloads overlap (a sync's, a live update's, a follow's). One that started earlier
+            // and finished later read the lists before the others' changes: a show just followed
+            // would leave the list until the next reload.
+            if (generation < reloadApplied) return
+            reloadApplied = generation
+            _state.update { it.copy(shows = shows, inbox = inbox, progress = progress, unreachable = failing, upNext = queued) }
+        }
     }
+
+    private val reloadsStarted = java.util.concurrent.atomic.AtomicLong()
+    private val reloadsLock = Any()
+    private var reloadApplied = 0L
 
     private suspend fun <K, V> coroutineScopeAll(keys: List<K>, work: suspend (K) -> V): Map<K, V> =
         kotlinx.coroutines.coroutineScope { keys.map { key -> async { key to work(key) } }.awaitAll().toMap() }

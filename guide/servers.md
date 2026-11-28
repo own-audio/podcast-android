@@ -83,6 +83,11 @@ in the switch.
 **Sync Now** syncs at once, and **Last Synced** says when it last did. The app also syncs on
 every refresh.
 
+A show the account lists under another address than this device follows it by (a feed that
+gives each subscriber an address of its own, or one that has moved or redirects) is recognised
+as the same show by the feed's `podcast:guid`, its address after redirects, or its title and
+website, and is not added a second time.
+
 ### Family, Devices and Listening (own.audio)
 
 Described in [own.audio extras](own-audio.md).

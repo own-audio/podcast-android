@@ -76,4 +76,4 @@ is open it checks again every 15 minutes.
 ## Tablets
 
 On a tablet the tabs are a rail along the
-side. See [The player](player.md#keyboard) for the keys that work with a keyboard.
+side, and held sideways the player puts the picture beside its controls. See [The player](player.md#keyboard) for the keys that work with a keyboard.

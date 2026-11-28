@@ -143,6 +143,9 @@ class PodcastPlayer(
             }
         }
         scope.launch { spoken.state.collect { publish(it) } }
+        // The countdown runs on the clock, paused or not, but the spoken player publishes only
+        // while it plays: without this the badge stood still until Play.
+        scope.launch { spoken.sleepTimer.state.collect { publish(spoken.state.value) } }
     }
 
     // region Loading
@@ -404,7 +407,7 @@ class PodcastPlayer(
             durationMs = duration,
             rate = s.speed,
             chapters = chapters,
-            sleepRemainingSecs = s.sleepRemainingSecs,
+            sleepRemainingSecs = spoken.sleepTimer.remainingSecs,
             sleepAtEndOfEpisode = s.sleepEnd == SleepEnd.END_OF_BOOK,
             sleepAtEndOfChapter = s.sleepEnd == SleepEnd.END_OF_CHAPTER,
             problem = when {

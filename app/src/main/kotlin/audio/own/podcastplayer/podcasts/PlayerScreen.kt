@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -233,43 +235,39 @@ fun PlayerContent(
             return@Scaffold
         }
         val large = LocalDensity.current.fontScale >= STACKED_FONT_SCALE
-        Box(Modifier.fillMaxSize().padding(inner), contentAlignment = Alignment.TopCenter) {
-            Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = Tokens.Spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl),
-            ) {
-                Box(Modifier.padding(top = Tokens.Spacing.sm)) {
-                    Artwork(item.episode.imageUrl ?: player.show?.imageUrl, if (large) 140.dp else 280.dp)
-                    player.sleepRemainingSecs?.let { remaining ->
-                        Surface(
-                            Modifier.align(Alignment.TopEnd).padding(Tokens.Spacing.sm),
-                            shape = CircleShape,
-                            color = palette.backgroundAlt.copy(alpha = 0.92f),
-                        ) {
-                            Row(Modifier.padding(horizontal = Tokens.Spacing.sm, vertical = Tokens.Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Bedtime, contentDescription = stringResource(R.string.sleep_timer), modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.size(4.dp))
-                                Text(ProgressText.clock((remaining * 1000).toLong()), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.SemiBold)
-                            }
+        val openSheet: (PlayerSheet) -> Unit = { sheet = it }
+        BoxWithConstraints(Modifier.fillMaxSize().padding(inner), contentAlignment = Alignment.TopCenter) {
+            // A tablet on its side: the picture beside the controls, so Speed, Sleep and Up Next
+            // are on screen without scrolling. The same rule as book-android's player.
+            if (maxWidth >= SIDE_BY_SIDE_MIN_WIDTH && maxWidth > maxHeight) {
+                Row(Modifier.fillMaxSize().testTag("player.sideBySide"), verticalAlignment = Alignment.CenterVertically) {
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = Tokens.Spacing.xl),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl, Alignment.CenterVertically),
+                    ) {
+                        PlayerPicture(player, if (large) 140.dp else 280.dp)
+                        PlayerTitles(player, openSheet)
+                    }
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = Tokens.Spacing.xl),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl, Alignment.CenterVertically),
+                    ) {
+                        Box(Modifier.widthIn(max = 560.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            PlayerControls(player, upNext, actions, showOutput, openSheet)
                         }
                     }
                 }
-                Column(Modifier.padding(horizontal = Tokens.Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
-                    Text(Mojibake.repair(item.episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.asHeading())
-                    player.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.bodyMedium, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    if (player.hasChapters) {
-                        TextButton(onClick = { sheet = PlayerSheet.CHAPTERS }) {
-                            Text(player.currentChapter?.title ?: stringResource(R.string.chapters), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                            Icon(Icons.Filled.ExpandMore, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-                Scrubber(player, actions)
-                Transport(player, actions)
-                Tools(player, upNext.isNotEmpty(), showOutput, onSheet = { sheet = it }, onOutput = actions::output)
-                if (player.problem == PodcastPlayer.Problem.CANT_PLAY) {
-                    Text(stringResource(R.string.error_cant_play), color = palette.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl))
+            } else {
+                Column(
+                    Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = Tokens.Spacing.xl),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl),
+                ) {
+                    PlayerPicture(player, if (large) 140.dp else 280.dp)
+                    PlayerTitles(player, openSheet)
+                    PlayerControls(player, upNext, actions, showOutput, openSheet)
                 }
             }
         }
@@ -282,6 +280,63 @@ fun PlayerContent(
         null -> Unit
     }
 }
+
+/** The picture with the sleep timer's badge. */
+@Composable
+private fun PlayerPicture(player: PodcastPlayer.State, size: androidx.compose.ui.unit.Dp) {
+    val palette = LocalPalette.current
+    val item = player.item ?: return
+    Box(Modifier.padding(top = Tokens.Spacing.sm)) {
+        Artwork(item.episode.imageUrl ?: player.show?.imageUrl, size)
+        player.sleepRemainingSecs?.let { remaining ->
+            Surface(
+                Modifier.align(Alignment.TopEnd).padding(Tokens.Spacing.sm),
+                shape = CircleShape,
+                color = palette.backgroundAlt.copy(alpha = 0.92f),
+            ) {
+                Row(Modifier.padding(horizontal = Tokens.Spacing.sm, vertical = Tokens.Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Bedtime, contentDescription = stringResource(R.string.sleep_timer), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text(ProgressText.clock((remaining * 1000).toLong()), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+/** The episode, the show and the current chapter as a button. */
+@Composable
+private fun PlayerTitles(player: PodcastPlayer.State, onSheet: (PlayerSheet) -> Unit) {
+    val palette = LocalPalette.current
+    val item = player.item ?: return
+    Column(Modifier.padding(horizontal = Tokens.Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xs)) {
+        Text(Mojibake.repair(item.episode.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.asHeading())
+        player.show?.let { Text(Mojibake.repair(it.title), style = MaterialTheme.typography.bodyMedium, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        if (player.hasChapters) {
+            TextButton(onClick = { onSheet(PlayerSheet.CHAPTERS) }) {
+                Text(player.currentChapter?.title ?: stringResource(R.string.chapters), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                Icon(Icons.Filled.ExpandMore, contentDescription = null, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+/** The scrubber, the transport and the tools. */
+@Composable
+private fun PlayerControls(player: PodcastPlayer.State, upNext: List<UpNext.Entry>, actions: PlayerActions, showOutput: Boolean, onSheet: (PlayerSheet) -> Unit) {
+    val palette = LocalPalette.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Spacing.xl)) {
+        Scrubber(player, actions)
+        Transport(player, actions)
+        Tools(player, upNext.isNotEmpty(), showOutput, onSheet = onSheet, onOutput = actions::output)
+        if (player.problem == PodcastPlayer.Problem.CANT_PLAY) {
+            Text(stringResource(R.string.error_cant_play), color = palette.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Tokens.Spacing.xl))
+        }
+    }
+}
+
+/** The narrowest window, in landscape, that puts the picture beside the controls. */
+private val SIDE_BY_SIDE_MIN_WIDTH = 840.dp
 
 @Composable
 private fun Scrubber(player: PodcastPlayer.State, actions: PlayerActions) {

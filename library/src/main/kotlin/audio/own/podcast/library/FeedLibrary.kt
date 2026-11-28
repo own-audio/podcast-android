@@ -81,8 +81,14 @@ class FeedLibrary(
     override suspend fun episode(key: EpisodeKey): Episode =
         store.record(key.showId)?.episodes?.firstOrNull { it.id == key.episodeId } ?: throw SourceException.NotFound()
 
+    /**
+     * Follows the feed at [feedUrl], or returns the show already followed that it turns out to be:
+     * the same address, the same `podcast:guid`, the same address after redirects, or the same
+     * title and website. A feed with an address per subscriber, or one that redirects, would
+     * otherwise come in twice from a sync server.
+     */
     override suspend fun follow(feedUrl: String): Show {
-        store.records().firstOrNull { it.show.feedUrl == feedUrl }?.let { return it.show }
+        ShowIdentity.byAddress(store.records().map { it.show }, listOf(feedUrl))?.let { return it }
         val result = try {
             loader.fetch(feedUrl, null)
         } catch (error: CancellationException) {
@@ -98,7 +104,7 @@ class FeedLibrary(
         if (result !is FeedFetcher.Result.Fetched) throw SourceException.Network()
         return mutex.withLock {
             // Two follows of the same feed may have raced past the check above.
-            store.records().firstOrNull { it.show.feedUrl == feedUrl }?.let { return@withLock it.show }
+            ShowIdentity.of(store.records().map { it.show }, result.document.show, listOfNotNull(feedUrl, result.finalUrl, result.document.show.newFeedUrl))?.let { return@withLock it }
             val record = FeedMerge.followed(newId(), result.document, result.validators, result.finalUrl, now())
             store.put(record)
             record.show

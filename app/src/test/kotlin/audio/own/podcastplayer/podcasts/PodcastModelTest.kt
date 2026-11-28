@@ -47,6 +47,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -160,9 +161,9 @@ class PodcastModelTest {
     private val downloads = FakeDownloader()
     private var offline = false
 
-    private fun model(engine: FakeEngine = FakeEngine()): Pair<PodcastModel, FakeEngine> {
+    private fun model(engine: FakeEngine = FakeEngine(), store: audio.own.podcast.library.FeedLibraryStore = RoomFeedLibraryStore(db)): Pair<PodcastModel, FakeEngine> {
         val upNext = UpNext(RoomValueStore(db, "up-next", ListSerializer(UpNext.Entry.serializer())))
-        val phone = FeedLibrary(RoomFeedLibraryStore(db), loader, now = { time })
+        val phone = FeedLibrary(store, loader, now = { time })
         val model = PodcastModel(
             db = db,
             phone = phone,
@@ -219,6 +220,37 @@ class PodcastModelTest {
                 model.state.value.inbox.map { it.episode.id } == listOf("e2")
             }
         }
+    }
+
+    /** The device's shows, read now and handed over only when [gate] opens: a slow reload. */
+    private class SlowStore(private val inner: audio.own.podcast.library.FeedLibraryStore) : audio.own.podcast.library.FeedLibraryStore by inner {
+        @Volatile var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        @Volatile var waiting = false
+
+        override suspend fun records(): List<audio.own.podcast.library.ShowRecord> {
+            val read = inner.records()
+            val held = gate ?: return read
+            gate = null
+            waiting = true
+            held.await()
+            return read
+        }
+    }
+
+    @Test
+    fun `a reload that started first and finished last does not take a followed show away`() {
+        val store = SlowStore(RoomFeedLibraryStore(db))
+        val (model, _) = model(store = store)
+        onMain { model.load() }
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        store.gate = gate
+        val early = CoroutineScope(main).launch { model.reloadLists() }
+        runBlocking { eventually { store.waiting } }
+        onMain { model.follow(FEED) }
+        assertEquals(listOf("Show"), model.state.value.shows.map { it.show.title })
+        gate.complete(Unit)
+        runBlocking { early.join() }
+        assertEquals("the earlier reload's empty list is dropped", listOf("Show"), model.state.value.shows.map { it.show.title })
     }
 
     @Test

@@ -383,7 +383,7 @@ class Downloads(
     }
 
     private suspend fun keep(item: DownloadEntity, part: File, fetched: DownloadFetcher.Fetched): Outcome {
-        if (!AudioPayloadCheck.looksLikeAudio(fetched.contentType, part)) {
+        if (!AudioPayloadCheck.looksLikeAudio(fetched.contentType, part, item.extensionHint)) {
             return fail(item, part, DownloadFailure.NOT_AUDIO)
         }
         val prefix = part.inputStream().use { input -> ByteArray(AudioPayloadCheck.PREFIX_BYTES).let { it.copyOf(input.read(it).coerceAtLeast(0)) } }

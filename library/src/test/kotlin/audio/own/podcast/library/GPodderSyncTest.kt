@@ -292,4 +292,66 @@ class GPodderSyncTest {
         assertEquals(listOf(200, 200, 50), account.uploadBatches)
         assertEquals("nothing is sent twice", 0, sync().sync().positionsSent)
     }
+    // Found on the emulator: a feed that answers each subscriber with a personal address, or one
+    // that redirects, came down from the account as a second copy of a show already followed.
+
+    private val fetched = mutableListOf<String>()
+
+    /** `personal?u=…` is one show whatever the token; `old/r.xml` redirects to `r.xml`; `x/` and `y/` are one show by title and website. */
+    private val sameShowLibrary = FeedLibrary(InMemoryFeedLibraryStore(), FeedLoader { url, _ ->
+        fetched += url
+        val episode = FeedEpisode(id = "e-1", title = "Episode 1", publishedAt = Instant.parse("2026-10-01T08:00:00Z"), durationMs = 600_000, enclosure = FeedEnclosure("https://cdn.example.com/e-1.mp3", "audio/mpeg", 1))
+        val (show, final) = when {
+            "personal" in url -> FeedShow(title = "Members Show", podcastGuid = "9b0c1f2e-guid") to url
+            url == "http://old.example.com/r.xml" -> FeedShow(title = "Moved Show") to "https://feeds.example.com/r.xml"
+            "/x/" in url || "/y/" in url -> FeedShow(title = "Twin", link = "https://twin.example.com/") to url
+            else -> FeedShow(title = "Other") to url
+        }
+        FeedFetcher.Result.Fetched(FeedDocument(show, listOf(episode)), FeedFetcher.Validators(), final)
+    })
+
+    private fun sameShowSync() = GPodderSync(GPodderClient(server.url("/").toString(), "jo", "pw", OkHttpClient()), sameShowLibrary, "phone", InMemoryValueStore(state))
+
+    @Test
+    fun `a personal feed address pulled from the account is the show already followed, by podcast guid`() = runTest {
+        sameShowLibrary.follow("https://members.example.com/personal?u=phone")
+        account.serverAdds("https://members.example.com/personal?u=laptop")
+        val first = sameShowSync().sync()
+        assertEquals(0, first.followed)
+        assertEquals(1, sameShowLibrary.shows().size)
+
+        fetched.clear()
+        val second = sameShowSync().sync()
+        assertEquals(0, second.followed)
+        assertEquals(1, sameShowLibrary.shows().size)
+        assertTrue("the account's address is not fetched again: $fetched", fetched.isEmpty())
+    }
+
+    @Test
+    fun `a pulled address that redirects to a followed feed is that show`() = runTest {
+        sameShowLibrary.follow("https://feeds.example.com/r.xml")
+        account.serverAdds("http://old.example.com/r.xml")
+        assertEquals(0, sameShowSync().sync().followed)
+        assertEquals(listOf("https://feeds.example.com/r.xml"), sameShowLibrary.shows().map { it.feedUrl })
+    }
+
+    @Test
+    fun `a pulled address with the same title and website is that show`() = runTest {
+        sameShowLibrary.follow("https://a.example.com/x/feed.xml")
+        account.serverAdds("https://b.example.com/y/feed.xml")
+        assertEquals(0, sameShowSync().sync().followed)
+        assertEquals(1, sameShowLibrary.shows().size)
+    }
+
+    @Test
+    fun `unfollowing a show the account knows by another address removes that address too`() = runTest {
+        sameShowLibrary.follow("https://members.example.com/personal?u=phone")
+        account.serverAdds("https://members.example.com/personal?u=laptop")
+        sameShowSync().sync()
+        sameShowLibrary.unfollow(sameShowLibrary.shows().single().id)
+        sameShowSync().sync()
+        assertTrue(sameShowLibrary.shows().isEmpty())
+        assertTrue("${account.feeds}", account.feeds.none { "personal" in it })
+    }
 }
+

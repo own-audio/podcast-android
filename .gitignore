@@ -19,3 +19,4 @@ keystore.properties
 .env
 
 .DS_Store
+__pycache__/

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.DrawableRes
 import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
@@ -29,21 +30,26 @@ class DownloadWorker(
     params: WorkerParameters,
     private val downloads: Downloads,
     private val notifications: DownloadNotifications,
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
 ) : CoroutineWorker(context, params) {
     private var title: String? = null
 
     override suspend fun doWork(): Result {
         val key = inputData.getString(KEY) ?: return Result.failure()
+        val throttle = ForegroundThrottle(clock) { title, fraction -> foreground(title, fraction) }
+        // At once, before the database or the network: a late foreground notification is what
+        // the user sees as a download that didn't start.
+        throttle.update(null, null)
         val outcome = downloads.run(
             key = key,
             attempt = runAttemptCount,
             onStart = { item ->
                 title = item.title
-                foreground(null)
+                throttle.update(title, null)
             },
             onProgress = { fraction ->
                 setProgress(workDataOf(PROGRESS to (fraction ?: -1f)))
-                foreground(fraction)
+                throttle.update(title, fraction)
             },
         )
         return when (outcome) {
@@ -59,7 +65,7 @@ class DownloadWorker(
      * A foreground service can't be started from the background on Android 12+ in some states;
      * the download still runs then, as ordinary work.
      */
-    private suspend fun foreground(fraction: Float?) {
+    private suspend fun foreground(title: String?, fraction: Float?) {
         try {
             setForeground(notifications.foregroundInfo(applicationContext, id.hashCode(), title, fraction))
         } catch (_: IllegalStateException) {
@@ -71,6 +77,44 @@ class DownloadWorker(
         const val PROGRESS = "progress"
         const val TAG = "download"
         fun workName(key: String) = "download:$key"
+    }
+}
+
+/**
+ * Decides which progress updates become a notification. Android sheds a package's notifications
+ * past five a second, and with progress twice a second next to the media session's own updates
+ * the download's foreground notification arrived seconds late or never. So: the first one at
+ * once, a new title at once, the finished state at once, and otherwise at most one every
+ * [everyMs], and only when the whole percent changed.
+ */
+internal class ForegroundThrottle(
+    private val now: () -> Long,
+    private val everyMs: Long = EVERY_MS,
+    private val post: suspend (title: String?, fraction: Float?) -> Unit,
+) {
+    private var posted = false
+    private var lastAt = 0L
+    private var lastTitle: String? = null
+    private var lastPercent = UNKNOWN
+
+    suspend fun update(title: String?, fraction: Float?) {
+        val percent = fraction?.let { (it.coerceIn(0f, 1f) * 100).toInt() } ?: UNKNOWN
+        val t = now()
+        if (posted) {
+            if (title == lastTitle && percent == lastPercent) return
+            val urgent = title != lastTitle || percent == 100
+            if (!urgent && t - lastAt < everyMs) return
+        }
+        posted = true
+        lastAt = t
+        lastTitle = title
+        lastPercent = percent
+        post(title, fraction)
+    }
+
+    companion object {
+        const val EVERY_MS = 1_200L
+        private const val UNKNOWN = -1
     }
 }
 

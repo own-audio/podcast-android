@@ -5,6 +5,14 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+- On a tablet held sideways (840 dp and wider than tall) the player has two panes: the picture, title and chapter on one side, the position bar, buttons and tools on the other, so Speed, Sleep, Up Next and Output no longer sit below the screen. Phones and upright tablets keep the one column.
+- A show pulled from a gPodder account under another address than the device's (a personal feed address per subscriber, a redirect, a moved feed) is matched to the show already followed — by `podcast:guid`, then the address after redirects, then title and website — instead of arriving twice; the account's address is remembered so it isn't fetched again, and unfollowing removes both addresses from the account.
+- A list reload that started earlier but finished later no longer overwrites a newer one, which could hide a show just pulled by Sync Now until the next relaunch.
+- The sleep timer's badge counts down while the episode is paused, and an episode at its very end says "Played" instead of "1 min left".
+- The download notification shows at once when a download starts, and progress updates it at most about once a second and only when the percent changes. Progress twice a second next to the player's own notification went over Android's limit of five a second per app, and the download's notification came seconds late or not at all.
+- A file whose audio starts after some junk bytes downloads when the server says it is audio (`audio/*`) or its name has an audio extension: the first 16 KB are searched for a real start (an ID3 tag, two MPEG frames in a row, ADTS, `ftyp`, FLAC, Ogg, WAVE, Matroska). An Audiobookshelf book had MP3s with 384 bytes before the first frame and failed with "The server did not send the file". HTML and JSON error pages are still refused.
+- Release bundles ask for the native libraries' symbol tables (`debugSymbolLevel = SYMBOL_TABLE`). The two native libraries in the app today (from AndroidX graphics-path and DataStore) arrive already stripped, so Play's "native code without debug symbols" warning stays until they ship symbols.
+
 ## [1.0.0] - 2026-11-28
 
 First release on Google Play (closed test).

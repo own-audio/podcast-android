@@ -84,5 +84,6 @@ object FeedMerge {
         categories = feed.categories.ifEmpty { show.categories },
         isSerial = feed.isSerial,
         isExplicit = feed.isExplicit,
+        podcastGuid = feed.podcastGuid ?: show.podcastGuid,
     )
 }

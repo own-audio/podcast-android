@@ -223,6 +223,19 @@ class PodcastPlayerTest {
     }
 
     @Test
+    fun `the sleep timer's time left moves on while paused`() {
+        player.load(episode("e1", 6_000), show, 0, autoplay = false, rate = 1f)
+        ready()
+        player.sleepAfter(audio.own.player.core.SleepTimer.Preset.FIVE_MINUTES)
+        idle()
+        val set = player.state.value.sleepRemainingSecs!!
+        ShadowLooper.idleMainLooper(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertFalse(player.state.value.isPlaying)
+        val now = player.state.value.sleepRemainingSecs!!
+        assertTrue("$set then $now", now <= set - 2)
+    }
+
+    @Test
     fun `skips stay inside the episode`() {
         player.setSkipIntervals(audio.own.player.core.SkipIntervals(15, 30))
         player.load(episode("e1", null), show, 1_000, autoplay = false, rate = 1f)

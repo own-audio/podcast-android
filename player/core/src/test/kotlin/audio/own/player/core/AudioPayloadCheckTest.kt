@@ -103,4 +103,97 @@ class AudioPayloadCheckTest {
         assertEquals("flac", AudioPayloadCheck.fileExtension("audio/x-flac"))
         assertNull(AudioPayloadCheck.fileExtension(null as String?))
     }
+
+    // region Audio after junk bytes
+
+    /** Junk like the 384 bytes found before the first frame of a real Audiobookshelf book's MP3s. */
+    private val junk = ByteArray(384) { i -> ((i * 37 + 11) % 0x7F).toByte() }
+
+    private fun withoutId3(mp3: ByteArray): ByteArray {
+        val size = ((mp3[6].toInt() and 0x7F) shl 21) or ((mp3[7].toInt() and 0x7F) shl 14) or ((mp3[8].toInt() and 0x7F) shl 7) or (mp3[9].toInt() and 0x7F)
+        return mp3.copyOfRange(10 + size, mp3.size)
+    }
+
+    private fun hex(text: String) = ByteArray(text.length / 2) { text.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+
+    /** Two ADTS frames of 16 bytes each. */
+    private val adts = (bytes(0xFF, 0xF1, 0x50, 0x80, 0x02, 0x1F, 0xFC) + ByteArray(9)).let { it + it }
+
+    @Test
+    fun junkBeforeMp3IsAcceptedWhenTheServerSaysAudio() {
+        val mp3 = fixture("test-tone.mp3")
+        assertTrue(AudioPayloadCheck.looksLikeAudio("audio/mpeg", junk + mp3))
+        // Frame sync alone, the tag gone: two frames where the first header says.
+        assertTrue(AudioPayloadCheck.looksLikeAudio("audio/mpeg", junk + withoutId3(mp3)))
+        assertTrue("the file name says audio", AudioPayloadCheck.looksLikeAudio("application/octet-stream", junk + mp3, extension = "mp3"))
+        assertEquals(384, AudioPayloadCheck.audioStart(junk + withoutId3(mp3)))
+    }
+
+    @Test
+    fun junkIsNotScannedWithoutAnAudioDeclaration() {
+        val mp3 = fixture("test-tone.mp3")
+        assertFalse(AudioPayloadCheck.looksLikeAudio("application/octet-stream", junk + mp3))
+        assertFalse(AudioPayloadCheck.looksLikeAudio(null, junk + mp3, extension = "json"))
+    }
+
+    @Test
+    fun audioPastTheScanWindowIsRefused() {
+        val far = ByteArray(AudioPayloadCheck.SCAN_BYTES) { 0x20 } + fixture("test-tone.mp3")
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/mpeg", far))
+    }
+
+    @Test
+    fun aLoneFrameSyncInJunkIsNotAudio() {
+        // A valid-looking MPEG header with nothing where the second frame should be.
+        val fake = junk + bytes(0xFF, 0xFB, 0x90, 0x00) + ByteArray(2000)
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/mpeg", fake))
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/mpeg", junk + "hello, this is not audio at all".toByteArray()))
+    }
+
+    @Test
+    fun errorBodiesDeclaredAsAudioAreStillRefused() {
+        val html = "<!DOCTYPE html><html><body>502 Bad Gateway</body></html>".toByteArray() + fixture("test-tone.mp3")
+        val json = """{"error":"not found"}""".toByteArray() + fixture("test-tone.mp3")
+        for (type in listOf("audio/mpeg", "text/html", "application/json")) {
+            assertFalse(type, AudioPayloadCheck.looksLikeAudio(type, html, extension = "mp3"))
+            assertFalse(type, AudioPayloadCheck.looksLikeAudio(type, json, extension = "mp3"))
+        }
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/mpeg", "\n  <html><body>gone</body></html>".toByteArray()))
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/mpeg", subsonicError))
+    }
+
+    @Test
+    fun eachFormatIsFoundAfterJunk() {
+        val formats = mapOf(
+            "flac" to fixture("test-tone.flac"),
+            "m4a" to fixture("test-tone.m4a"),
+            "ogg" to "OggS".toByteArray() + bytes(0, 2) + ByteArray(40),
+            "wav" to "RIFF".toByteArray() + bytes(0x24, 0, 0, 0) + "WAVEfmt ".toByteArray() + ByteArray(40),
+            "mka" to hex("1A45DFA39F4286810142F7810142F2810442F381084282886D6174726F736B61"),
+            "aac" to adts,
+        )
+        for ((name, payload) in formats) {
+            assertTrue("$name at 0", AudioPayloadCheck.looksLikeAudio("application/octet-stream", payload))
+            assertTrue("$name after junk", AudioPayloadCheck.looksLikeAudio("audio/$name", junk + payload))
+            assertEquals(name, 384, AudioPayloadCheck.audioStart(junk + payload))
+        }
+    }
+
+    @Test
+    fun matroskaSignatureIsRawBytes() {
+        // music-ios once encoded this signature as text; these four bytes are not ASCII.
+        assertTrue(AudioPayloadCheck.looksLikeAudio(null, hex("1A45DFA3")))
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/webm", junk + "1A45DFA3".toByteArray()))
+        assertFalse(AudioPayloadCheck.looksLikeAudio("audio/webm", junk + "\u001AE\u00DF\u00A3".toByteArray(Charsets.UTF_8)))
+    }
+
+    @Test
+    fun junkBeforeAudioInAFile() {
+        val file = temp.newFile("book.mp3").apply { writeBytes(junk + fixture("test-tone.mp3")) }
+        assertTrue(AudioPayloadCheck.looksLikeAudio("audio/mpeg", file))
+        assertTrue(AudioPayloadCheck.looksLikeAudio(null, file, extension = "mp3"))
+        assertFalse(AudioPayloadCheck.looksLikeAudio(null, file))
+    }
+
+    // endregion
 }

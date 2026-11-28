@@ -62,9 +62,17 @@ object ProgressText {
         return DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale).format(day)
     }
 
-    /** "2 h 10 min left" at the speed the episode plays at. */
-    fun leftAtSpeed(res: Resources, ms: Long, rate: Float): String =
-        res.getString(R.string.time_left, length(res, (maxOf(ms, 0) / maxOf(rate, 0.1f).toDouble()).roundToLong()))
+    /**
+     * "2 h 10 min left" at the speed the episode plays at; "Played" once nothing is left, where
+     * [length]'s floor of a minute would say "1 min left" at the very end.
+     */
+    fun leftAtSpeed(res: Resources, ms: Long, rate: Float): String {
+        if (ms < END_MS) return res.getString(R.string.played)
+        return res.getString(R.string.time_left, length(res, (ms / maxOf(rate, 0.1f).toDouble()).roundToLong()))
+    }
+
+    /** Less than this before the end is the end: a player stops a few frames short of it. */
+    private const val END_MS = 1_000L
 }
 
 /** Plain text with its web addresses made into links, opened by the system. */
