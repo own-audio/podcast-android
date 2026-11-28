@@ -1,0 +1,29 @@
+Categories:
+  - Multimedia
+License: MPL-2.0
+AuthorName: own.audio
+AuthorEmail: hello@own.audio
+WebSite: https://www.own.audio/apps/
+SourceCode: https://github.com/own-audio/podcast-android
+IssueTracker: https://github.com/own-audio/podcast-android/issues
+Changelog: https://github.com/own-audio/podcast-android/blob/HEAD/CHANGELOG.md
+
+AutoName: own.audio Podcasts
+
+RepoType: git
+Repo: https://github.com/own-audio/podcast-android.git
+
+Builds:
+  - versionName: 1.0.1
+    versionCode: 47
+    commit: v1.0.1
+    subdir: app
+    gradle:
+      - foss
+    gradleprops:
+      - app.versionCode=47
+
+AutoUpdateMode: None
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.1
+CurrentVersionCode: 47
