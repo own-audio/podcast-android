@@ -5,6 +5,8 @@ All notable changes to own.audio Podcasts for Android. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-28
+
 - On a tablet held sideways (840 dp and wider than tall) the player has two panes: the picture, title and chapter on one side, the position bar, buttons and tools on the other, so Speed, Sleep, Up Next and Output no longer sit below the screen. Phones and upright tablets keep the one column.
 - A show pulled from a gPodder account under another address than the device's (a personal feed address per subscriber, a redirect, a moved feed) is matched to the show already followed — by `podcast:guid`, then the address after redirects, then title and website — instead of arriving twice; the account's address is remembered so it isn't fetched again, and unfollowing removes both addresses from the account.
 - A list reload that started earlier but finished later no longer overwrites a newer one, which could hide a show just pulled by Sync Now until the next relaunch.
