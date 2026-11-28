@@ -1,0 +1,1 @@
+First test version of own.audio Podcasts for Android. Follow any podcast feed, keep Up Next and positions in sync with own.audio, Audiobookshelf or gPodder, download episodes for offline listening. Feedback: hello@own.audio

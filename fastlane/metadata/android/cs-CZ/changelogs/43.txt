@@ -1,0 +1,1 @@
+První testovací verze own.audio Podcasts pro Android. Odebírejte libovolné podcasty, Up Next a pozice se synchronizují s own.audio, Audiobookshelfem nebo gPodderem, epizody si stáhnete pro poslech offline. Připomínky: hello@own.audio
