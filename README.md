@@ -17,6 +17,9 @@ What changed is in [CHANGELOG.md](CHANGELOG.md); the parts shared with the other
 - **GitHub:** a signed APK with every [release](https://github.com/own-audio/podcast-android/releases/latest).
 - **Obtainium** keeps it updated from those releases:
   [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/own-audio/podcast-android)
+- **F-Droid client** (F-Droid, Droid-ify, Neo Store): add the own.audio repository —
+  [own-audio.github.io/fdroid](https://own-audio.github.io/fdroid/) has the link and QR code. Updates arrive
+  within a few hours of each release.
 - **Google Play:** closed test — how to join is on [own.audio/apps](https://www.own.audio/apps/#android).
 
 The GitHub build has no Google code in it (no Continue with Google). A GitHub install and a Google Play
